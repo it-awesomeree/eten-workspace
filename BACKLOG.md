@@ -16,7 +16,9 @@ Prioritized parking lot for ideas, deferred tasks, and improvements. Organized b
 
 | # | Item | Priority | Status | Notes |
 |---|------|----------|--------|-------|
-| 1 | _Add items as they come up_ | — | — | — |
+| 1 | Migrate hardcoded API keys in SET API KEY node to n8n credentials | Medium | Open | Gemini + OpenAI keys are hardcoded; should use n8n credential store |
+| 2 | Test Variation Generator v4 with more product types | Medium | Open | Execution #603 passed with plant shelf; test with clothing, electronics, etc. |
+| 3 | Add error notification to Variation Generator v4 | Low | Open | Slack/email alert when workflow execution fails |
 
 ---
 
