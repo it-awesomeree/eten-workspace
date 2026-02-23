@@ -43,7 +43,7 @@ Every session must update the relevant documentation files. This is non-negotiab
 
 ### 2. n8n Workflows
 - **Instance**: `https://n8n.barndoguru.com` (v2.35.2)
-- **Key workflows**: Variation & Description Generator family, Webhook Regenerate V2, Shopee Listing generators
+- **Key workflows**: Shopee Listing New Variation Generation, Webhook Regenerate V2, Shopee Listing generators
 - **Reference skill**: `/n8n-workflows` command for full workflow inventory and MCP tools
 
 ### 3. VM Bot Scripts

@@ -6,9 +6,9 @@ Session-by-session record of work done. Newest entries at the top.
 
 ## W09: Feb 23, 2026+
 
-### Session 0223-2: n8n Variation Generator v4 — 5-Node Enhancement + Deployment
+### Session 0223-2: n8n Shopee Listing New Variation Generation — 5-Node Enhancement + Deployment
 
-**Workflow**: Variation & Description Generator v4 (`_nYkX49YkTfTdwWTsDjM1`)
+**Workflow**: Shopee Listing New Variation Generation (`_nYkX49YkTfTdwWTsDjM1`)
 
 **What was done**:
 - Enhanced 5 core nodes in the n8n workflow via REST API (PUT):

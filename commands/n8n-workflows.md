@@ -1,5 +1,5 @@
 ---
-description: n8n automation platform - 43 workflows with deep dive on Variation & Description Generator v4 (Webhook + DB)
+description: n8n automation platform - 43 workflows with deep dive on Shopee Listing New Variation Generation (Webhook + DB)
 argument-hint: [workflow name, node, or what you're looking for]
 ---
 
@@ -32,14 +32,14 @@ argument-hint: [workflow name, node, or what you're looking for]
 | v1 | `9LPwZozvCtFVXvnwLz9Q1` | 18 | Inactive | Original "Variation & Description" |
 | v2 | `L4thBW21QnO3FILw` | 16 | Inactive | |
 | v3 | `Yb0pwv7T4JKggqLfFUuHw` | 17 | Inactive | |
-| **v4 (Webhook + DB)** | `_nYkX49YkTfTdwWTsDjM1` | **25** | **Inactive** | Added webhook + GCS + MySQL persistence |
+| **Shopee Listing New Variation Generation** | `_nYkX49YkTfTdwWTsDjM1` | **25** | **Inactive** | Added webhook + GCS + MySQL persistence |
 | Description Only | `IfnGkVJvKFWf0PReAO7XA` | 17 | Inactive | Description-only variant |
 | Webhook Regenerate | `6LdPkAKOYDDozU1M6yiLQ` | 55 | Inactive | Regeneration variant |
 | Webhook Regenerate V2 | `M6wBk9TCuMohMByU` | 55 | **Active** | Latest regeneration |
 
 ---
 
-## Deep Dive: Variation & Description Generator v4
+## Deep Dive: Shopee Listing New Variation Generation
 
 **Workflow ID**: `_nYkX49YkTfTdwWTsDjM1`
 **Created**: 2026-02-05 | **Updated**: 2026-02-12 | **Version**: 9

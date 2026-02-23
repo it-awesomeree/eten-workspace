@@ -52,11 +52,11 @@ Consolidated reference of skills, tools, and domain knowledge for my three devel
 | Workflow | ID | Nodes | Purpose |
 |----------|----|-------|---------|
 | Webhook Regenerate V2 | `M6wBk9TCuMohMByU` | 55 | Active — regeneration webhook |
-| Variation & Description v4 | `_nYkX49YkTfTdwWTsDjM1` | 25 | Webhook + GCS + MySQL persistence |
+| Shopee Listing New Variation Generation | `_nYkX49YkTfTdwWTsDjM1` | 25 | Webhook + GCS + MySQL persistence |
 | Shopee MY Listing Generator v10 | `D4V7jNP8l-5IbP0dM7qui` | 41 | Fixed loops version |
 | Shopee MY Listing Generator v14 | `pIvGDAL-kJuyECws7EeFX` | 23 | No loops version |
 
-### Variation Generator v4 — Quick Reference
+### Shopee Listing New Variation Generation — Quick Reference
 - **Dual entry**: Form upload (manual Excel) + Webhook (webapp POST)
 - **Webhook URL**: `https://n8n.barndoguru.com/webhook/generate-variation-description`
 - **AI services**: Gemini 2.5 Flash (image OCR/profiling), Gemini 3 Pro (image gen), GPT-5.2 (variation names + descriptions)
