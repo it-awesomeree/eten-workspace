@@ -6,6 +6,47 @@ Session-by-session record of work done. Newest entries at the top.
 
 ## W10: Feb 24, 2026
 
+### Session 0224-2: Variation Name Prompt v2 + Image Generation Prompt Review
+
+**Workflow**: Shopee Listing New Variation Generation (`_nYkX49YkTfTdwWTsDjM1`)
+
+**What was done**:
+
+**Webhook JSON format documentation**:
+- Documented the full webhook POST payload format for triggering from webapp
+- Verified with id=55 (MasonGym Pilates Bar) — user sent test data, webhook triggered successfully (Execution #620, all 20 nodes passed)
+
+**New variation name prompt (v2) — reviewed, adapted, deployed**:
+- User provided a new per-variation prompt with comparator logic, reserved names, positioning_hint
+- **Senior review identified 7 incompatibilities**: per-variation loop (no loop node), output schema mismatch (downstream parser expects `new_variation_names[].generated_name`), 7/12 input variables don't exist, comparator node doesn't exist
+- **Adapted to Option 2**: rewrote prompt for batch mode, removed comparator/reserved names/positioning_hint, kept same output schema + user_prompt_template
+- Key improvements over v1: explicit tier-count inference, normalization spec for uniqueness, cross-candidate uniqueness, abbreviation rules, input parsing notes
+- Saved as `node2-generate-variation-names-prompt-v2.json`
+- **Deployed via `deploy-v2-prompt.mjs`** — system prompt updated (4503 → 9489 chars), verified in n8n
+- **Tested with id=61** (ValueSnap RC Truck) — webhook triggered, workflow started (awaiting result check tomorrow)
+
+**Image generation prompt — senior review (no changes)**:
+- User provided a template-swap based image generation prompt
+- **Reviewed against current workflow (Node 14: Process Variations)** — identified fundamental incompatibilities:
+  - Template-swap approach vs current from-scratch generation
+  - `newVariationsJson` structured input doesn't exist (current uses plain string `generated_variation_names[i]`)
+  - FAIL/SKIP text output not handled downstream (expects binary image always)
+  - `existingTierCount`/`targetTier` variables don't exist
+  - Text replacement logic overcomplicated for typical Shopee variation images
+- **Verdict**: NOT compatible as-is, needs adaptation (same as variation name prompt)
+- **Status**: Review complete, adaptation deferred to next session
+
+**Files created**: `node2-generate-variation-names-prompt-v2.json`, `deploy-v2-prompt.mjs`
+
+**Tools used**: n8n REST API (GET/PUT), MySQL MCP, Node.js, GPT-5.2
+
+**Key decisions**:
+- Adapt prompts to workflow (Option 2) rather than restructure workflow (Option 1)
+- Keep same output schema to avoid breaking downstream parser
+- Keep same user_prompt_template (n8n expressions unchanged)
+
+---
+
 ### Session 0224-1: Shopee Listing New Variation Regeneration — Full Regen Support + Bugfixes
 
 **Workflows**: Variation Generation (`_nYkX49YkTfTdwWTsDjM1`) + Variation Regeneration (`rKOMjD071lkvvZDe`)

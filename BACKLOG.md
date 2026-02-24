@@ -22,6 +22,10 @@ Prioritized parking lot for ideas, deferred tasks, and improvements. Organized b
 | 4 | Improve Validate Variations to catch bad variation names | Medium | Open | Names like "- 1-2" pass validation; add min-length, starts-with-dash, and meaningful-content checks |
 | 5 | Webapp integration for Variation Regeneration webhook | High | Open | Build UI to trigger `POST /webhook/regenerate-variation-description` with field selection (variation/description/variation_image) |
 | 6 | Staging review UI for `shopee_variation_staging` | Medium | Open | Approve/reject regenerated variations before promoting to live listing |
+| 7 | Adapt image generation prompt for current from-scratch workflow | High | Open | User's template-swap prompt needs rewrite for Node 14 (Process Variations). See senior review in Session 0224-2. Key: keep from-scratch approach, add better style-matching rules, improve label logic |
+| 8 | Create shared n8n deploy utility | Low | Open | Recurring `active` field + settings filter issue across deploy scripts. Extract to `n8n-deploy-utils.mjs` shared module |
+| 9 | Check id=61 execution result | High | Open | v2 prompt deployed + webhook triggered for id=61 (ValueSnap RC Truck). Need to verify GPT output quality and downstream completion |
+| 10 | Webapp webhook integration — document JSON format | Medium | Open | Full webhook payload format documented in session. Build into webapp's trigger UI |
 
 ---
 

@@ -17,6 +17,13 @@ Errors encountered during development, with root causes and resolutions. Newest 
 
 ---
 
+### 2026-02-24: n8n PUT 400 — `active` is read-only (again, deploy-v2-prompt.mjs)
+**Context**: Deploying v2 variation name prompt via `deploy-v2-prompt.mjs`
+**Error**: `HTTP 400: request/body/active is read-only`
+**Root Cause**: Same as previous — included `active: workflow.active` in PUT body
+**Resolution**: Removed `active` field from PUT body in deploy script
+**Prevention**: This keeps recurring in new deploy scripts. Consider creating a shared deploy utility that always strips `active` + filters settings.
+
 ### 2026-02-24: n8n PUT 400 — `active` is read-only
 **Context**: Deploying bugfixes to Variation Generation workflow via PUT
 **Error**: `HTTP 400: request/body/active is read-only`
