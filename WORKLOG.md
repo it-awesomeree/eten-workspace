@@ -4,6 +4,41 @@ Session-by-session record of work done. Newest entries at the top.
 
 ---
 
+## W10: Feb 24, 2026
+
+### Session 0224-1: Shopee Listing New Variation Regeneration — Full Regen Support + Bugfixes
+
+**Workflows**: Variation Generation (`_nYkX49YkTfTdwWTsDjM1`) + Variation Regeneration (`rKOMjD071lkvvZDe`)
+
+**What was done**:
+
+**Bugfixes deployed to Variation Generation**:
+- Bug 2: Process Variations timeout — sequential → parallel batch processing (BATCH_SIZE=3)
+- Bug 4: Hardcoded database name — centralized `target_database` in SET API KEY node
+- Bug 6: No execution timeout — added `executionTimeout: 600` (10 min)
+- Bug 1: GCS empty batch crash — added "Check Has Images" IF node
+- Bug 1b: Parse Webhook Data null image crash — null guard for `typeof null === 'object'`
+
+**Regeneration support added to Variation Regeneration (`rKOMjD071lkvvZDe`)**:
+- 2 Gate IF nodes: Gate: Variation Names, Gate: Description — skip GPT calls when not regenerating
+- Parse Webhook Data: parses `regenerate[]`, `current_outputs`, computes skip flags
+- Extract Variation Names / Description: passthrough from `current_outputs` when skipping
+- Process Variations: skips Gemini image gen when `skip_variation_image` is true
+- Prepare MySQL Data: regen → INSERT INTO `shopee_variation_staging`; normal → UPDATE `shopee_existing_listing`
+- Webhook path: `regenerate-variation-description` (distinct from Generation workflow)
+
+**New table**: `requestDatabase.shopee_variation_staging` (separate from `shopee_listings_staging` — different column schema for variation vs product workflows)
+
+**Timeout fix (both workflows)**: Generate Variation Names 60s → 120s + retry (3 tries, 5s wait)
+
+**n8n API key**: Created programmatically via REST login + POST /rest/api-keys
+
+**Deploy scripts**: `deploy-bugfixes.mjs`, `deploy-bug1-fix.mjs`, `deploy-bug1b-fix.mjs`, `deploy-regen-support.mjs`, `deploy-regen-staging.mjs`, `create-api-key.mjs`, `test-id46.mjs`, `test-id52.mjs`, `test-regen-id52.mjs`, `monitor-exec.mjs`
+
+**Tools used**: n8n REST API, Node.js, MySQL DDL via VM, GPT-5.2, Gemini Vision
+
+---
+
 ## W09: Feb 23, 2026+
 
 ### Session 0223-2: n8n Shopee Listing New Variation Generation — 5-Node Enhancement + Deployment

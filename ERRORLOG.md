@@ -17,6 +17,41 @@ Errors encountered during development, with root causes and resolutions. Newest 
 
 ---
 
+### 2026-02-24: n8n PUT 400 — `active` is read-only
+**Context**: Deploying bugfixes to Variation Generation workflow via PUT
+**Error**: `HTTP 400: request/body/active is read-only`
+**Root Cause**: Including `active: true` in the PUT body; n8n treats `active` as read-only in PUT
+**Resolution**: Removed `active` field from PUT body; use separate POST `/activate` endpoint instead
+**Prevention**: Never include `active` in PUT body; activation is a separate API call
+
+### 2026-02-24: n8n Generate Variation Names — 60s timeout (ECONNABORTED)
+**Context**: Testing regen workflow with id=52 (Pop Up Tent)
+**Error**: `AxiosError: timeout of 60000ms exceeded` on Generate Variation Names node
+**Root Cause**: GPT-5.2 API call with reasoning_effort=high sometimes exceeds 60s, especially for complex Chinese→English translation
+**Resolution**: Increased timeout from 60s to 120s + added retry (3 tries, 5s wait) on both Generation and Regeneration workflows
+**Prevention**: Always configure retries on external API calls; 60s is too low for reasoning models
+
+### 2026-02-24: `typeof null === 'object'` crash in Parse Webhook Data
+**Context**: Testing with id=46 where `1688_variation_images: [null, null]`
+**Error**: `Cannot read properties of null (reading 'url')` — `varImg.url` when varImg is null
+**Root Cause**: JavaScript `typeof null === 'object'` is true, so `(typeof varImg === 'object')` passed for null values
+**Resolution**: Added null guard: `(varImg && typeof varImg === 'object')`
+**Prevention**: Always null-check before typeof object checks in JavaScript
+
+### 2026-02-24: n8n login field name — `emailOrLdapLoginId` not `email`
+**Context**: Creating API key programmatically via n8n REST login
+**Error**: `400 "code":"invalid_type","expected":"string","path":["emailOrLdapLoginId"]`
+**Root Cause**: n8n login endpoint expects `emailOrLdapLoginId` field, not `email`
+**Resolution**: Changed field name to `emailOrLdapLoginId`
+**Prevention**: Check n8n REST API schema for exact field names
+
+### 2026-02-24: MySQL MCP DDL blocked — `DDL operations are not allowed`
+**Context**: Creating `shopee_variation_staging` table via MySQL MCP tool
+**Error**: `DDL operations are not allowed for schema 'requestDatabase'`
+**Root Cause**: MCP MySQL tool has DDL permissions disabled for that schema
+**Resolution**: Provided CREATE TABLE SQL to user to run manually
+**Prevention**: DDL must be run directly on the database server or by a user with DDL permissions
+
 ### 2026-02-23: n8n API PATCH 405 — Method Not Allowed
 **Context**: Deploying workflow updates via n8n REST API
 **Error**: `HTTP 405: PATCH method not allowed`
