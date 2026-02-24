@@ -33,7 +33,10 @@ Prioritized parking lot for ideas, deferred tasks, and improvements. Organized b
 
 | # | Item | Priority | Status | Notes |
 |---|------|----------|--------|-------|
-| 1 | _Add items as they come up_ | — | — | — |
+| 1 | VM TT: Add auto-login fallback (Option B) to screenshot scripts | Medium | Open | If Chrome crashes or VM reboots, scripts fail until manual re-login. Auto-detect login page + enter credentials as fallback |
+| 2 | VM TT: Auto-start Chrome with debug port on boot/login | Medium | Open | Create Windows Task Scheduler task to run `start_chrome_debug.bat` on user logon, so Chrome is always ready |
+| 3 | VM TT: Fix `low_rating_0600` DB auth error | High | Open | Today's log shows "DB auth error" — database credentials issue, separate from the Selenium fix |
+| 4 | VM TT: Apply same remote debugging fix to `TikTok.py` XPath | Low | Open | TikTok XPath `/div/div[1]/div[2]/button[2]` may also be stale if employee webapp UI changed. Needs verification once Chrome debug is running |
 
 ---
 

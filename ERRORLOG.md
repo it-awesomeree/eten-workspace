@@ -17,6 +17,27 @@ Errors encountered during development, with root causes and resolutions. Newest 
 
 ---
 
+### 2026-02-24: VM TT Selenium `SessionNotCreatedException` — Chrome not reachable on port 9222
+**Context**: Testing updated Shopee.py with `debuggerAddress` on VM TT
+**Error**: `session not created: cannot connect to chrome at 127.0.0.1:9222 from chrome not reachable`
+**Root Cause**: Chrome was not started with `--remote-debugging-port=9222` before running the script
+**Resolution**: Must run `start_chrome_debug.bat` first to launch Chrome with the debugging port
+**Prevention**: Scripts depend on Chrome already running with debug port; add a pre-check or clear error message
+
+### 2026-02-24: VM TT Selenium `driver.__del__()` kills Chrome between scrape and WhatsApp steps
+**Context**: First version of fix used separate `setup_driver()` calls for scrape and WhatsApp send
+**Error**: `SessionNotCreatedException` on WhatsApp step — Chrome gone despite scrape succeeding
+**Root Cause**: After `scrape_shopee_report()` returned, the `driver` local variable went out of scope → Python GC called `driver.__del__()` → `driver.quit()` → all Chrome windows closed
+**Resolution**: Changed to single shared driver in `main()`, passed to both functions, `driver.close()` only at the very end
+**Prevention**: When using `debuggerAddress`, never let driver objects go out of scope mid-flow; share a single driver across all steps
+
+### 2026-02-24: VM TT — Cannot launch GUI Chrome via WinRM
+**Context**: Tried to start Chrome with debugging port remotely via `Start-Process` and `schtasks`
+**Error**: Chrome processes started but no visible window on desktop; `Get-Process chrome` returned empty for `Start-Process`, and `schtasks /Run` also failed to show GUI
+**Root Cause**: WinRM sessions run in Session 0 (non-interactive); GUI apps need the user's interactive session (Session 1)
+**Resolution**: Used `Invoke-WmiMethod Win32_Process Create` which spawns in Session 0 (headless), OR user runs `start_chrome_debug.bat` manually from desktop
+**Prevention**: For GUI apps on VMs, provide a batch file for the user to run manually; remote process creation via WinRM is non-interactive
+
 ### 2026-02-24: n8n PUT 400 — `active` is read-only (again, deploy-v2-prompt.mjs)
 **Context**: Deploying v2 variation name prompt via `deploy-v2-prompt.mjs`
 **Error**: `HTTP 400: request/body/active is read-only`

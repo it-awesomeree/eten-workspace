@@ -47,6 +47,42 @@ Session-by-session record of work done. Newest entries at the top.
 
 ---
 
+### Session 0224-3: VM TT schedule.py Investigation & Shopee/TikTok Screenshot Script Fix
+
+**VM**: VM TT (port 65504, role: scheduler, bot: tiktok-schedule)
+
+**What was done**:
+- **Investigation**: Diagnosed why Shopee SG, Shopee MY, and TikTok WhatsApp notifications stopped sending
+  - `schedule.py` (APScheduler) was running correctly — all 7 jobs firing on time (mon-fri)
+  - Root cause: All 3 screenshot scripts (`Shopee.py`, `SGShopee.py`, `TikTok.py`) crashing at `scrape_shopee_report()` with Selenium `TimeoutException` on export button XPath
+  - Deeper root cause: `employee.awesomeree.com.my` webapp requires login, but Chrome profile had **zero awesomeree cookies** (only 4 cookies total: google + whatsapp). Session cookies destroyed each run because scripts killed Chrome before launching new instance
+  - Broken since ~Jan 27, 2026 (1 month of silent failures, all rc=1)
+
+- **Fix — Chrome Remote Debugging (Option A)**:
+  - Rewrote `setup_driver()` in all 3 scripts to connect via `debuggerAddress` on port 9222 instead of launching/killing Chrome
+  - Changed from two separate driver connections to **single shared driver** per script — avoids Python GC `__del__()` → `quit()` killing Chrome between scrape and WhatsApp steps
+  - Replaced `driver.quit()` with `driver.close()` (closes only the work tab)
+  - Created `start_chrome_debug.bat` to launch Chrome with `--remote-debugging-port=9222`
+
+- **Files modified on VM TT** (`C:\Users\Admin\Desktop\schedule\Screenshots my sg tt\`):
+  - `Shopee.py` (Shopee MY — backup: `.bak.20260224103421`)
+  - `SGShopee.py` (Shopee SG — backup: `.bak.20260224103439`)
+  - `TikTok.py` (TikTok — backup: `.bak.20260224112826`)
+  - `start_chrome_debug.bat` (new file in `schedule\`)
+
+- **Tested**: User manually ran updated Shopee.py — confirmed working
+
+**Tools used**: VM Control Plane MCP (vm_execute, vm_write_file, vm_read_file, vm_status, vm_inventory), Python sqlite3 cookie DB inspection
+
+**Key decisions**:
+- Single driver per script run prevents Python GC from killing Chrome between steps
+- Chrome must be started once with `start_chrome_debug.bat` + manual login; session persists while Chrome runs
+- Future: Option B (auto-login) as fallback if Chrome crashes become frequent
+
+**Also discovered**: `low_rating_0600` failing with "DB auth error" — separate issue, not addressed
+
+---
+
 ### Session 0224-1: Shopee Listing New Variation Regeneration — Full Regen Support + Bugfixes
 
 **Workflows**: Variation Generation (`_nYkX49YkTfTdwWTsDjM1`) + Variation Regeneration (`rKOMjD071lkvvZDe`)
