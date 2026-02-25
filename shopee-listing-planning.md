@@ -108,6 +108,60 @@ Add Shopee existing listing columns to `shopee_listing_products`. Update both sc
 
 ---
 
+## Migration File Deployment Process
+
+> **CRITICAL**: All database schema changes MUST be deployed via migration files pushed to the `awesomeree-web-app` repository under `migrations/request/`. Direct ALTER TABLE statements on production are NOT allowed.
+
+### How it works
+
+1. **Create migration SQL file** following the naming convention: `YYYYMMDDNNNNNN_description.sql`
+2. **Push to `test` branch** → triggers deployment to staging (`webapp_test` database)
+3. **Validate on staging** → verify columns exist, no errors, frontend still works
+4. **Push to `main` branch** → triggers deployment to production (`requestDatabase`)
+5. **Update `atlas.sum`** → add the new migration file entry with `h1:placeholder`
+
+### Naming convention
+
+```
+YYYYMMDDNNNNNN_description.sql
+│       │      │
+│       │      └─ Descriptive name using snake_case
+│       └──────── Sequence number (000000, 000001, ...)
+└──────────────── Date in YYYYMMDD format
+```
+
+Latest existing migration: `20260224000006_create_compat_view.sql`
+
+### Migration SQL style (idempotent pattern)
+
+All migrations use the **idempotent check-then-alter** pattern to be safely re-runnable:
+
+```sql
+-- Check if column exists before adding
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'target_table'
+  AND COLUMN_NAME = 'new_column');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `target_table` ADD COLUMN `new_column` VARCHAR(500) NULL AFTER `existing_column`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+```
+
+### Files involved per migration
+
+| File | Action |
+|---|---|
+| `migrations/request/YYYYMMDDNNNNNN_description.sql` | New migration file |
+| `migrations/request/atlas.sum` | Append new entry with `h1:placeholder` |
+
+### Repository config
+
+- **atlas.hcl**: `env "request" { url = getenv("REQUEST_DB_URL"); migration { dir = "file://migrations/request" } }`
+- **atlas.sum**: List of all migration files with placeholder hashes
+
+---
+
 ## Phase 0: Preparation & Backup
 
 **Objective**: Safeguard current data before making any changes.
@@ -134,40 +188,145 @@ Confirmed: Composite unique index `uq_product_1688url` on `(product_id, 1688_url
 
 ---
 
-## Phase 1: Database Schema Changes
+## Phase 1: Create & Deploy Migration Files
 
-**Objective**: Add Shopee existing data columns to the normalized `shopee_listing_products` table so it can store everything the New Variation workflow needs.
+**Objective**: Create migration SQL files for schema changes and deploy through the proper migration pipeline (test → staging validation → main → production).
 
-### Step 1.1 — ALTER `shopee_listing_products` (on `webapp_test` first)
+### Step 1.1 — Create migration file: `20260225000000_add_shopee_columns_to_listing_products.sql`
+
+**File location**: `migrations/request/20260225000000_add_shopee_columns_to_listing_products.sql`
 
 ```sql
-ALTER TABLE webapp_test.shopee_listing_products
-  ADD COLUMN shopee_product_name     VARCHAR(500) NULL   COMMENT 'Existing Shopee listing name (from Shopee API)'     AFTER n8n_supporting_image,
-  ADD COLUMN shopee_description      LONGTEXT     NULL   COMMENT 'Existing Shopee listing description (from Shopee API)' AFTER shopee_product_name,
-  ADD COLUMN shopee_variation_images JSON         NULL   COMMENT 'Existing Shopee tier-1 variation images (from Shopee API)' AFTER shopee_description,
-  ADD COLUMN tier_name_1             VARCHAR(100) NULL   COMMENT 'Existing Shopee tier 1 name e.g. Colour (from Shopee API)' AFTER shopee_variation_images,
-  ADD COLUMN t1_variation            JSON         NULL   COMMENT 'Existing Shopee tier 1 options e.g. ["Red","Blue"] (from Shopee API)' AFTER tier_name_1,
-  ADD COLUMN tier_name_2             VARCHAR(100) NULL   COMMENT 'Existing Shopee tier 2 name e.g. Size (from Shopee API)' AFTER t1_variation,
-  ADD COLUMN t2_variation            JSON         NULL   COMMENT 'Existing Shopee tier 2 options e.g. ["S","M","L"] (from Shopee API)' AFTER tier_name_2;
+-- 20260225000000_add_shopee_columns_to_listing_products.sql
+-- Adds Shopee existing listing data columns to shopee_listing_products
+-- for the New Variation generation workflow. (idempotent)
+
+-- shopee_product_name: Existing Shopee listing name (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'shopee_product_name');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `shopee_product_name` VARCHAR(500) NULL COMMENT ''Existing Shopee listing name (from Shopee API)'' AFTER `n8n_supporting_image`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- shopee_description: Existing Shopee listing description (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'shopee_description');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `shopee_description` LONGTEXT NULL COMMENT ''Existing Shopee listing description (from Shopee API)'' AFTER `shopee_product_name`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- shopee_variation_images: Existing Shopee tier-1 variation images (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'shopee_variation_images');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `shopee_variation_images` JSON NULL COMMENT ''Existing Shopee tier-1 variation images (from Shopee API)'' AFTER `shopee_description`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- tier_name_1: Existing Shopee tier 1 name e.g. Colour (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'tier_name_1');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `tier_name_1` VARCHAR(100) NULL COMMENT ''Existing Shopee tier 1 name e.g. Colour (from Shopee API)'' AFTER `shopee_variation_images`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- t1_variation: Existing Shopee tier 1 options e.g. ["Red","Blue"] (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 't1_variation');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `t1_variation` JSON NULL COMMENT ''Existing Shopee tier 1 options e.g. ["Red","Blue"] (from Shopee API)'' AFTER `tier_name_1`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- tier_name_2: Existing Shopee tier 2 name e.g. Size (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'tier_name_2');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `tier_name_2` VARCHAR(100) NULL COMMENT ''Existing Shopee tier 2 name e.g. Size (from Shopee API)'' AFTER `t1_variation`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- t2_variation: Existing Shopee tier 2 options e.g. ["S","M","L"] (from Shopee API)
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 't2_variation');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `t2_variation` JSON NULL COMMENT ''Existing Shopee tier 2 options e.g. ["S","M","L"] (from Shopee API)'' AFTER `tier_name_2`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 ```
 
-### Step 1.2 — Run the same ALTER on production
+### Step 1.2 — Update `atlas.sum`
 
-```sql
-ALTER TABLE requestDatabase.shopee_listing_products
-  ADD COLUMN shopee_product_name     VARCHAR(500) NULL   COMMENT 'Existing Shopee listing name (from Shopee API)'     AFTER n8n_supporting_image,
-  ADD COLUMN shopee_description      LONGTEXT     NULL   COMMENT 'Existing Shopee listing description (from Shopee API)' AFTER shopee_product_name,
-  ADD COLUMN shopee_variation_images JSON         NULL   COMMENT 'Existing Shopee tier-1 variation images (from Shopee API)' AFTER shopee_description,
-  ADD COLUMN tier_name_1             VARCHAR(100) NULL   COMMENT 'Existing Shopee tier 1 name e.g. Colour (from Shopee API)' AFTER shopee_variation_images,
-  ADD COLUMN t1_variation            JSON         NULL   COMMENT 'Existing Shopee tier 1 options e.g. ["Red","Blue"] (from Shopee API)' AFTER tier_name_1,
-  ADD COLUMN tier_name_2             VARCHAR(100) NULL   COMMENT 'Existing Shopee tier 2 name e.g. Size (from Shopee API)' AFTER t1_variation,
-  ADD COLUMN t2_variation            JSON         NULL   COMMENT 'Existing Shopee tier 2 options e.g. ["S","M","L"] (from Shopee API)' AFTER tier_name_2;
+Append to the end of `migrations/request/atlas.sum`:
+```
+20260225000000_add_shopee_columns_to_listing_products.sql h1:placeholder
 ```
 
-### Step 1.3 — Verify schema
+### Step 1.3 — Push to `test` branch (staging deployment)
+
+```bash
+# In awesomeree-web-app repo
+git checkout test
+git pull origin test
+# Add the migration file + updated atlas.sum
+git add migrations/request/20260225000000_add_shopee_columns_to_listing_products.sql
+git add migrations/request/atlas.sum
+git commit -m "migration: add shopee columns to shopee_listing_products for new variation flow"
+git push origin test
+```
+
+### Step 1.4 — Validate on staging (`webapp_test`)
+
 ```sql
-DESCRIBE requestDatabase.shopee_listing_products;
--- Confirm 7 new columns exist after n8n_supporting_image
+-- Verify columns were added on staging
+SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = 'webapp_test'
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME IN ('shopee_product_name', 'shopee_description', 'shopee_variation_images',
+                       'tier_name_1', 't1_variation', 'tier_name_2', 't2_variation');
+-- Should return 7 rows
+```
+
+Also verify frontend still loads (new columns are all NULL — no breaking change).
+
+### Step 1.5 — Push to `main` branch (production deployment)
+
+```bash
+# After staging validation passes
+git checkout main
+git pull origin main
+git merge test  # or cherry-pick the migration commit
+git push origin main
+```
+
+### Step 1.6 — Verify on production (`requestDatabase`)
+
+```sql
+SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = 'requestDatabase'
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME IN ('shopee_product_name', 'shopee_description', 'shopee_variation_images',
+                       'tier_name_1', 't1_variation', 'tier_name_2', 't2_variation');
+-- Should return 7 rows
 ```
 
 **Columns added** (all NULL-able, only populated for `item_type = 'new_variation'`):
@@ -182,15 +341,17 @@ DESCRIBE requestDatabase.shopee_listing_products;
 | `tier_name_2` | VARCHAR(100) | Shopee API | Second tier name (e.g. "Size") |
 | `t2_variation` | JSON | Shopee API | Second tier options (e.g. ["S","M","L"]) |
 
-**Acceptance**: `DESCRIBE` shows all 7 new columns. No data loss. Frontend still works (columns are NULL, no breaking change).
+**Acceptance**: `DESCRIBE` shows all 7 new columns on both staging and production. No data loss. Frontend still works (columns are NULL, no breaking change).
 
-**Dependencies**: None — this is the first phase.
+**Dependencies**: Phase 0 (backups must exist first).
 
 ---
 
 ## Phase 2: Migrate Existing Data
 
 **Objective**: Copy the 12 rows of valid data from `shopee_existing_listing` into the normalized tables so nothing is lost.
+
+> **Note**: Data migration is run manually (not via migration file) because it involves cross-table data copy that is a one-time operation. Similar to how `20260224000005_migrate_data.js` was handled separately.
 
 ### Step 2.1 — Migrate Shopee API data (shopee_product_name, description, tiers)
 
@@ -250,7 +411,7 @@ For any results: these items need product rows created in `shopee_listing_produc
 
 **Acceptance**: All Shopee data from `shopee_existing_listing` is now in `shopee_listing_products`. Verified with SELECT queries.
 
-**Dependencies**: Phase 1 (columns must exist).
+**Dependencies**: Phase 1 (columns must exist on production).
 
 ---
 
@@ -431,7 +592,7 @@ Both scripts can now run in any order:
 - Test on one known product (e.g. product_id=10059817794, ValueSnap RC Truck) and verify data appears correctly in normalized tables
 - Verify dedup works — re-running the script does not create duplicate rows
 
-**Dependencies**: Phase 1 (schema), Phase 2 (migration).
+**Dependencies**: Phase 1 (schema deployed to production).
 
 ---
 
@@ -572,7 +733,7 @@ shopeeExistingTiers?: {
 - `POST /api/shopee-listings/generate` for a `new_variation` item includes Shopee fields in the n8n webhook payload
 - No regressions for `new_product` items (Shopee fields are null/omitted)
 
-**Dependencies**: Phase 1 (schema), Phase 2 (data).
+**Dependencies**: Phase 1 (schema deployed to production).
 
 ---
 
@@ -798,13 +959,16 @@ Update this document with completion status and any changes made during implemen
 | 0.1 | Prep | Back up tables | TODO | |
 | 0.2 | Prep | Verify FK constraint | DONE | |
 | 0.3 | Prep | Verify unique index | DONE | |
-| 1.1 | Schema | ALTER on webapp_test | TODO | |
-| 1.2 | Schema | ALTER on requestDatabase | TODO | |
-| 1.3 | Schema | Verify DESCRIBE | TODO | |
-| 2.1 | Migrate | Copy Shopee data to normalized | TODO | |
-| 2.2 | Migrate | Copy 1688 desc images | TODO | |
-| 2.3 | Migrate | Verify migration | TODO | |
-| 2.4 | Migrate | Handle orphan items | TODO | |
+| 1.1 | Migration | Create `20260225000000_add_shopee_columns_to_listing_products.sql` | TODO | |
+| 1.2 | Migration | Update `atlas.sum` | TODO | |
+| 1.3 | Migration | Push to `test` branch (staging) | TODO | |
+| 1.4 | Migration | Validate 7 new columns on staging (`webapp_test`) | TODO | |
+| 1.5 | Migration | Push to `main` branch (production) | TODO | |
+| 1.6 | Migration | Verify 7 new columns on production (`requestDatabase`) | TODO | |
+| 2.1 | Data Migration | Copy Shopee data to normalized | TODO | |
+| 2.2 | Data Migration | Copy 1688 desc images | TODO | |
+| 2.3 | Data Migration | Verify migration | TODO | |
+| 2.4 | Data Migration | Handle orphan items | TODO | |
 | 3.1 | Scripts | Update 1688 variation scraper | TODO | |
 | 3.2 | Scripts | Update Shopee API script | TODO | |
 | 3.3 | Scripts | Test script execution order | TODO | |
@@ -872,6 +1036,20 @@ lib/services/shopee-listings/
   n8n-webhook.ts, job-tracker.ts, normalizers.ts (38KB), types.ts
 ```
 
+### Migrations
+```
+migrations/request/
+  atlas.hcl                          — Atlas config (env "request", dir = "file://migrations/request")
+  atlas.sum                          — Migration checksum file (placeholder hashes)
+  20260224000001_create_shopee_listing_products.sql
+  20260224000002_create_shopee_listing_variations.sql
+  20260224000003_create_shopee_listing_reviews.sql
+  20260224000004_formalize_hero_templates.sql
+  20260224000005_migrate_data.js     — Data migration script (JS, not SQL)
+  20260224000006_create_compat_view.sql
+  20260225000000_add_shopee_columns_to_listing_products.sql  ← NEW (this plan)
+```
+
 ## D2. n8n Webhooks
 
 | Flow | URL |
@@ -888,3 +1066,15 @@ lib/services/shopee-listings/
 - **Variation count fallback**: Falls back to `new_items.variation_list_en` when no variation rows
 - **Regeneration staging**: Regen output goes to `shopee_listing_reviews`, requires approve/reject
 - **Connection-per-query**: Each DB operation opens/closes its own connection
+
+## D4. Migration Deployment Flow
+
+```
+Create SQL file → Push to test branch → Staging validates → Push to main branch → Production applies
+                  (webapp_test DB)                          (requestDatabase)
+```
+
+- **Naming**: `YYYYMMDDNNNNNN_description.sql`
+- **Style**: Idempotent (check column exists before ALTER)
+- **Checksum**: `atlas.sum` with `h1:placeholder` entries
+- **Branch flow**: `test` → staging validation → `main` → production
