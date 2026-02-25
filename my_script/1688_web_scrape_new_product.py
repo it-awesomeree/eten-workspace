@@ -336,7 +336,7 @@ def connect_target_db():
     )
 
 
-def insert_shopee_listings(product_id, product_name, reference_links, launch_type, variation_names, variation_imgs, gallery_urls, description_imgs, description_txt, item_date=None):
+def insert_shopee_listings(product_id, new_item_id, product_name, reference_links, launch_type, variation_names, variation_imgs, gallery_urls, description_imgs, description_txt, item_date=None):
     """
     Insert scraped data into shopee_listing_products + shopee_listing_variations.
     """
@@ -365,12 +365,13 @@ def insert_shopee_listings(product_id, product_name, reference_links, launch_typ
         # 1. Insert product row into shopee_listing_products
         query_product = """
             INSERT INTO shopee_listing_products
-                (product_id, launch_type, item_type, `1688_url`, `1688_product_name`,
+                (product_id, new_item_id, launch_type, item_type, `1688_url`, `1688_product_name`,
                  `1688_hero`, `1688_supporting_image`,
                  `1688_product_description_text`, `1688_product_description_image`,
                  item_date, status)
-            VALUES (%s, %s, 'new_product', %s, %s, %s, %s, %s, %s, %s, 'bot')
+            VALUES (%s, %s, %s, 'new_product', %s, %s, %s, %s, %s, %s, %s, 'bot')
             ON DUPLICATE KEY UPDATE
+                product_id = VALUES(product_id),
                 `1688_url` = VALUES(`1688_url`),
                 `1688_product_name` = VALUES(`1688_product_name`),
                 `1688_hero` = VALUES(`1688_hero`),
@@ -380,22 +381,22 @@ def insert_shopee_listings(product_id, product_name, reference_links, launch_typ
                 item_date = VALUES(item_date)
         """
         cursor.execute(query_product, (
-            product_id, launch_type, url_1688, product_name,
+            product_id, new_item_id, launch_type, url_1688, product_name,
             hero_img, supporting_imgs, description_txt, desc_imgs_json, item_date,
         ))
 
         # 2. Insert variation rows
         rows_inserted = 0
-        cursor.execute("DELETE FROM shopee_listing_variations WHERE product_id = %s", (product_id,))
+        cursor.execute("DELETE FROM shopee_listing_variations WHERE new_item_id = %s", (new_item_id,))
 
         if variation_names and len(variation_names) > 0:
             for i, var_name in enumerate(variation_names):
                 var_img = variation_imgs[i] if variation_imgs and len(variation_imgs) > i else None
                 cursor.execute("""
                     INSERT INTO shopee_listing_variations
-                        (product_id, sort_order, `1688_variation`, `1688_variation_image`)
-                    VALUES (%s, %s, %s, %s)
-                """, (product_id, i, var_name, var_img))
+                        (product_id, new_item_id, sort_order, `1688_variation`, `1688_variation_image`)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (product_id, new_item_id, i, var_name, var_img))
                 rows_inserted += 1
 
         conn.commit()
@@ -423,19 +424,19 @@ def get_product_names_from_db():
         cursor = conn.cursor()
         # Query products that haven't been scraped yet (not in shopee_listing_products)
         query = """
-            SELECT ni.product_id, ni.product_name_cn, ni.variation_list_cn, ni.reference_links, ni.launch_type, DATE(ni.date) AS item_date
+            SELECT ni.id, ni.product_id, ni.product_name_cn, ni.variation_list_cn, ni.reference_links, ni.launch_type, DATE(ni.date) AS item_date
             FROM new_items ni
             WHERE ni.product_name_cn IS NOT NULL
               AND ni.product_name_cn != ''
               AND ni.launch_type = 'New Product'
-              AND ni.product_id NOT IN (
-                  SELECT product_id FROM shopee_listing_products WHERE product_id IS NOT NULL
+              AND ni.id NOT IN (
+                  SELECT new_item_id FROM shopee_listing_products WHERE new_item_id IS NOT NULL
               )
         """
         cursor.execute(query)
         rows = cursor.fetchall()
         # Return list of tuples: (product_id, product_name, variation_list_cn, reference_links, launch_type, item_date)
-        products = [(row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows if row[0] and row[1]]
+        products = [(row[0], row[1], row[2], row[3], row[4], row[5], row[6]) for row in rows if row[1] and row[2]]
         print(f"Found {len(products)} products to scrape (excluding already scraped).")
         return products
     except Exception as e:
@@ -1198,7 +1199,7 @@ def process_products(driver, products, profile_path):
         human_delay(2, 5)
         return new_driver
 
-    for idx, (product_id, product_name, variation_list_cn, reference_links, launch_type, item_date) in enumerate(products, 1):
+    for idx, (new_item_id, product_id, product_name, variation_list_cn, reference_links, launch_type, item_date) in enumerate(products, 1):
         try:
             print(f"\n[{idx}/{len(products)}] Processing: {product_name}")
         except:
@@ -1252,6 +1253,7 @@ def process_products(driver, products, profile_path):
             print("\nInserting into database...")
             rows_inserted = insert_shopee_listings(
                 product_id,
+                new_item_id,
                 product_name,
                 reference_links,
                 launch_type,
@@ -1328,7 +1330,7 @@ def main():
 
         # Debug: print first few products
         print("\n[DEBUG] First 3 products:")
-        for i, (pid, name, variations, ref_links, ltype, _date) in enumerate(products[:3]):
+        for i, (_ni_id, pid, name, variations, ref_links, ltype, _date) in enumerate(products[:3]):
             try:
                 print(f"  {i+1}. [ID: {pid}] {name}")
                 print(f"      Variations: {variations[:50]}..." if variations and len(variations) > 50 else f"      Variations: {variations}")
