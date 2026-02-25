@@ -386,60 +386,44 @@ def connect_target_db():
 
 def update_existing_listing(product_id, url_1688, product_name, variation_names, variation_imgs, description_imgs, item_date=None):
     """
-    Update requestDatabase.shopee_existing_listing with scraped 1688 data.
-    Uses composite unique key (product_id, 1688_url) -- one row per 1688 source.
-
-    Args:
-        product_id: Product ID (Shopee item_id) to match in shopee_existing_listing
-        url_1688: 1688 offer URL (used as part of composite unique key)
-        product_name: Product name from 1688 (product_name_cn)
-        variation_names: List of variation name strings
-        variation_imgs: List of variation image URLs (matching order with variation_names)
-        description_imgs: List of description image URLs
-        item_date: Date from new_items.date (earliest across rows)
-
-    Returns:
-        int: Number of rows affected (0, 1 for insert, 2 for update)
+    Upsert scraped 1688 data into shopee_listing_products + shopee_listing_variations.
     """
     conn = connect_target_db()
-
     try:
         cursor = conn.cursor()
-
-        # Prepare JSON data (ensure_ascii=False to store Chinese characters readably)
-        variation_json = json.dumps(variation_names, ensure_ascii=False) if variation_names else None
-        variation_imgs_json = json.dumps(variation_imgs, ensure_ascii=False) if variation_imgs else None
         desc_imgs_json = json.dumps(description_imgs, ensure_ascii=False) if description_imgs else None
 
-        query = """
-            INSERT INTO shopee_existing_listing
-                (product_id, `1688_url`, `1688_product_name`, `1688_variation`,
-                 `1688_variation_images`, `1688_description_images`, item_date, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        # 1. Upsert shopee_listing_products (one row per product_id)
+        query_product = """
+            INSERT INTO shopee_listing_products
+                (product_id, launch_type, item_type, `1688_url`, `1688_product_name`,
+                 `1688_product_description_image`, item_date, status)
+            VALUES (%s, 'New Variation', 'new_variation', %s, %s, %s, %s, 'bot')
             ON DUPLICATE KEY UPDATE
+                `1688_url` = VALUES(`1688_url`),
                 `1688_product_name` = VALUES(`1688_product_name`),
-                `1688_variation` = VALUES(`1688_variation`),
-                `1688_variation_images` = VALUES(`1688_variation_images`),
-                `1688_description_images` = VALUES(`1688_description_images`),
-                item_date = VALUES(item_date),
-                updated_at = NOW()
+                `1688_product_description_image` = VALUES(`1688_product_description_image`),
+                item_date = VALUES(item_date)
         """
-        cursor.execute(query, (
-            product_id,
-            url_1688,
-            product_name,
-            variation_json,
-            variation_imgs_json,
-            desc_imgs_json,
-            item_date,
-        ))
+        cursor.execute(query_product, (product_id, url_1688, product_name, desc_imgs_json, item_date))
+        affected = cursor.rowcount
+
+        # 2. Replace variations: delete old, insert new
+        cursor.execute("DELETE FROM shopee_listing_variations WHERE product_id = %s", (product_id,))
+        if variation_names:
+            for i, var_name in enumerate(variation_names):
+                var_img = variation_imgs[i] if variation_imgs and len(variation_imgs) > i else None
+                cursor.execute("""
+                    INSERT INTO shopee_listing_variations
+                        (product_id, sort_order, `1688_variation`, `1688_variation_image`)
+                    VALUES (%s, %s, %s, %s)
+                """, (product_id, i, var_name, var_img))
 
         conn.commit()
-        affected = cursor.rowcount
         cursor.close()
 
-        print(f"  [DB] {'Updated' if affected > 1 else 'Inserted'} shopee_existing_listing for product_id={product_id}, 1688_url={url_1688}")
-        print(f"       - {len(variation_names) if variation_names else 0} variations")
+        print(f"  [DB] {'Updated' if affected > 1 else 'Inserted'} shopee_listing_products for product_id={product_id}")
+        print(f"       - {len(variation_names) if variation_names else 0} variations in shopee_listing_variations")
         print(f"       - {len(variation_imgs) if variation_imgs else 0} variation images")
         print(f"       - {len(description_imgs) if description_imgs else 0} description images")
 
@@ -451,7 +435,7 @@ def update_existing_listing(product_id, url_1688, product_name, variation_names,
     finally:
         conn.close()
 
-# --- Fetch Product Names from Database ---
+
 def get_product_names_from_db():
     """Fetch all new_items rows for 'New Variation' products,
     grouped by product_id then sub-grouped by 1688 offer ID.
@@ -532,7 +516,7 @@ def get_product_names_from_db():
         # Filter out url_groups that already exist in shopee_existing_listing
         # (matched by product_id + 1688_url composite key)
         cursor2 = conn.cursor()
-        cursor2.execute("SELECT product_id, `1688_url` FROM shopee_existing_listing WHERE `1688_url` IS NOT NULL")
+        cursor2.execute("SELECT product_id, `1688_url` FROM shopee_listing_products WHERE `1688_url` IS NOT NULL")
         existing = set()
         for r in cursor2.fetchall():
             existing.add((r[0], r[1]))
@@ -1432,7 +1416,7 @@ def process_products(driver, products_dict, profile_path):
             description_imgs, _description_txt = fetch_description_content(driver)
 
             # Write this group's data to shopee_existing_listing (one row per 1688 source)
-            print(f"\n  Writing to shopee_existing_listing...")
+            print(f"\n  Writing to shopee_listing_products + shopee_listing_variations...")
             rows_affected = update_existing_listing(
                 product_id,
                 url,                # 1688_url -- part of composite unique key
@@ -1491,7 +1475,7 @@ def main():
     print("="*60)
     print("1688 Existing Listing Scraper (New Variation)")
     print("="*60)
-    print("Data will be saved to: requestDatabase.shopee_existing_listing")
+    print("Data will be saved to: requestDatabase.shopee_listing_products + shopee_listing_variations")
 
     # Setup driver with profile
     print("\nStarting Chrome with profile...")
