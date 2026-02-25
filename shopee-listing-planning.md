@@ -1,3 +1,193 @@
+# PROGRESS TRACKER — new_item_id Migration
+
+> Last updated: 25 Feb 2026 (Session 2)
+
+## The Problem
+
+`shopee_listing_products` had `UNIQUE(product_id)`, causing data collisions when the same `product_id` appears in multiple `new_items` events (e.g., New Product + New Variation, or multiple New Variations for the same product). The `ON DUPLICATE KEY UPDATE` in the 1688 scraper would overwrite data from one event with another.
+
+## The Solution
+
+Add `new_item_id` column (references `new_items.id`) as the new unique key. Each `new_items` row gets its own `shopee_listing_products` row, identified by `new_item_id`.
+
+---
+
+## Phase 1: Schema Migration — DONE
+
+### Migration 1: Add new_item_id column
+- **File**: `migrations/request/20260225000001_add_new_item_id.sql`
+- **Status**: Deployed to both `webapp_test` and `requestDatabase`
+- Adds `new_item_id BIGINT NULL` to `shopee_listing_products` and `shopee_listing_variations`
+
+### Migration 2: Switch unique constraint
+- **File**: `migrations/request/20260225000002_switch_unique_to_new_item_id.sql`
+- **Status**: Deployed to both `webapp_test` and `requestDatabase`
+- Drops `fk_variation_product` and `fk_review_product` foreign keys
+- Drops `UNIQUE(product_id)` → adds `INDEX(product_id)` (non-unique)
+- Adds `UNIQUE(new_item_id)` on `shopee_listing_products`
+- Adds `INDEX(new_item_id)` on `shopee_listing_variations`
+
+### CI Pipeline Fix
+- **File**: `.github/workflows/db-deploy.yml` (test branch only)
+- Added **DATABASE 1c** step: applies `migrations/request` to `webapp_test` on test branch pushes
+- Previously, `migrations/request` was only applied to `requestDatabase` on main branch pushes
+- **TODO**: Merge this fix to main branch
+
+### Backfill
+- **Status**: Completed on both databases
+- `requestDatabase`: 331 products, 1940 variations backfilled
+- `webapp_test`: 323 products, 1940 variations backfilled
+- Used `MAX(new_items.id)` per product_id to assign the most recent new_item event
+- Zero NULLs remaining in `new_item_id` column
+
+---
+
+## Phase 2: Python Scripts (1688 scraper + Shopee API) — DONE
+
+All 3 scripts updated and pushed to `main` branch in `it-awesomeree/eten-workspace`:
+
+### `my_script/shopee_api.py`
+- **Commit**: [6f1a315](https://github.com/it-awesomeree/eten-workspace/commit/6f1a3156f97892969b79f920072877cea8d9b876)
+- `save_to_db()` now takes `new_item_id` parameter, uses `WHERE new_item_id = %s`
+- `main()` builds `pid_to_items` mapping to handle multiple rows per product_id
+- Uses `unique_product_ids` for Shopee API batches (avoids duplicate API calls)
+- Save loop iterates matching items, passing `orig_item["row_id"]` (= `new_items.id`) as `new_item_id`
+
+### `my_script/1688_web_scrape_new_product.py`
+- **Commit**: [92d0f61](https://github.com/it-awesomeree/eten-workspace/commit/92d0f611fe353eced129d1d7e2567d638175989e)
+- `get_product_names_from_db()` selects `ni.id`, dedup uses `ni.id NOT IN (SELECT new_item_id ...)`
+- `insert_shopee_listings()` includes `new_item_id` in INSERT columns
+- DELETE/INSERT on variations uses `WHERE new_item_id = %s`
+- Call site unpacks and passes `new_item_id` from `ni.id`
+
+### `my_script/1688_web_scrape_new_variation.py`
+- **Commit**: [eb40b78](https://github.com/it-awesomeree/eten-workspace/commit/eb40b7891c9da3f70874ee9e83f3bca1f409301e)
+- Dedup check queries `(new_item_id, 1688_url)` pairs instead of `(product_id, 1688_url)`
+- `update_existing_listing()` takes `new_item_id` parameter
+- INSERT/DELETE on both tables uses `new_item_id`
+- Call site passes `ni_id` from `new_items.id`
+
+### Deploy to VM
+- **TODO**: Pull updated scripts on the VM where they run
+
+---
+
+## Phase 3: Webapp Backend — TODO (next session)
+
+### Repo: `it-awesomeree/awesomeree-web-app` → `test` branch
+
+The webapp currently uses `product_id` everywhere as the unique key to look up rows. Since `product_id` is no longer unique, ALL lookups must change to `new_item_id`.
+
+### Research completed — here's what needs to change:
+
+#### `lib/services/shopee-listings/types.ts`
+- Add `new_item_id?: number | string | null` to `ProductRow` interface
+- Add `new_item_id?: number | string | null` to `VariationRow` interface
+
+#### `lib/services/shopee-listings/generate.ts` (48KB, 1454 lines — the big one)
+
+| Function | Current SQL | Change to |
+|----------|-------------|-----------|
+| `fetchProduct(productId)` | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `fetchVariations(productId)` | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `fetchShopeeListingSummary()` | Product map keyed by `product_id` | Key by `new_item_id`. Lookup by `ni.id` instead of `ni.product_id` |
+| `fetchShopeeListingDetail(productId)` | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `applyGeneratedFields` | `UPDATE ... WHERE product_id = ?` | `UPDATE ... WHERE new_item_id = ?` |
+| `buildGeneratePayload` | `SELECT shop FROM new_items WHERE product_id = ?` | `SELECT shop FROM new_items WHERE id = ?` |
+| `fetchLatestPendingReviewRow` | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `fetchPendingReviewRowsForProducts` | `WHERE product_id IN (...)` | `WHERE new_item_id IN (...)` |
+| `fetchAllProducts` | ORDER BY product_id | Keep (no change needed) |
+| `fetchAllVariations` | ORDER BY product_id | Keep (no change needed) |
+| Competitor queries | `our_item_id` = Shopee product_id | Keep (competitors are per Shopee product, not per listing event) |
+
+**Summary view map building** (critical change):
+```
+// OLD: Map<product_id, ProductRow>
+productMap.set(String(p.product_id), p)
+// NEW: Map<new_item_id, ProductRow>
+productMap.set(String(p.new_item_id), p)
+
+// OLD: lookup
+productMap.get(String(ni.product_id))
+// NEW: lookup by new_items.id
+productMap.get(String(ni.id))
+```
+
+Same change for variation map.
+
+**n8n payload**: Keep `product_id` in the payload (n8n uses it for Shopee API calls). Read it from the product row. Also add `new_item_id` to payload so n8n can reference back.
+
+#### `lib/services/shopee-listings/job-tracker.ts`
+
+| Query | Current | Change to |
+|-------|---------|-----------|
+| `markProductJobStatus` UPDATE | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `claimProductForProcessing` SELECT FOR UPDATE | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `claimProductForProcessing` variations SELECT | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| Global mutex check | `product_id <> ?` | `new_item_id <> ?` |
+| Claim UPDATE | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| Stale job sweep | No product_id filter | No change needed |
+
+#### `app/api/shopee-listings/generate/route.ts`
+- Accept `new_item_id` / `newItemId` instead of `product_id`
+- Pass `newItemId` to `generateShopeeListingForProduct()`
+
+#### `app/api/shopee-listings/route.ts` (GET handler for detail)
+- Accept `newItemId` query param instead of `productId`
+- Pass to `fetchShopeeListingDetail()`
+
+#### `app/api/shopee-listings/staging/route.ts`
+- Accept `new_item_id` instead of `product_id`
+
+#### `lib/services/shopee-listings/n8n-webhook.ts`
+- No SQL changes (just sends payload as-is)
+- Payload still includes `product_id` for n8n (from the product row)
+
+### Frontend changes needed:
+
+#### `components/shopee-listing/hooks/useGenerateFlow.ts`
+- Send `new_item_id` instead of `product_id` in POST body to `/api/shopee-listings/generate`
+- Send `new_item_id` instead of `product_id` to `/api/shopee-listings/staging`
+
+#### `components/shopee-listing/hooks/useProductDetail.ts`
+- `selectedProductId` currently holds `product_id` (the Shopee item ID)
+- Needs to hold `new_item_id` instead (the unique listing event identifier)
+- `loadProductDetail()` sends `?productId=...` → change to `?newItemId=...`
+- Guard effect validates against `product.productId` → validate against `product.newItemId`
+
+#### `components/shopee-listing/page.tsx` (76KB)
+- Row click handler: `setSelectedProductId(product.productId)` → `setSelectedProductId(product.newItemId)`
+- Summary table may need to show `new_item_id` or both IDs
+
+#### `types/shopee-listing.ts` (frontend types)
+- `ListingProductSummary`: add `newItemId: string` field
+- `ListingProductDetail`: change `id` to be `new_item_id` value (or add `newItemId` field)
+
+---
+
+## Phase 4: Deploy & Test — TODO
+
+1. Push all webapp changes to `test` branch
+2. Test the full flow on staging:
+   - Summary view loads correctly (each new_items row shows its own product data)
+   - Click Generate → correct row is processed
+   - n8n webhook receives correct payload
+   - Generated output applies to correct row
+3. Test with duplicate product_id scenario (two new_items with same product_id)
+4. Push to `main` when verified
+5. Merge `db-deploy.yml` DATABASE 1c fix from test to main
+
+---
+
+## Phase 5: Deploy Python Scripts to VM — TODO
+
+1. Pull updated scripts on the VM
+2. Test 1688 scraper manually (user runs it to pre-collect data)
+3. Test Shopee API script manually
+4. Verify data lands in correct rows with correct `new_item_id`
+
+---
+
 # Shopee Listing — Full Analysis & Implementation Plan
 
 > Reference doc for all shopee-listing work.
