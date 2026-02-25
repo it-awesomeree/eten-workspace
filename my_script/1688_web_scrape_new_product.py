@@ -338,21 +338,7 @@ def connect_target_db():
 
 def insert_shopee_listings(product_id, product_name, reference_links, launch_type, variation_names, variation_imgs, gallery_urls, description_imgs, description_txt, item_date=None):
     """
-    Insert scraped data into shopee_listings table.
-    Creates one row per variation.
-
-    Args:
-        product_id: Product ID from new_items table
-        product_name: Product name (product_name_cn)
-        reference_links: 1688 URL from new_items.reference_links (JSON)
-        variation_names: List of variation names
-        variation_imgs: List of variation image URLs (matching order)
-        gallery_urls: List of gallery URLs (first is hero, rest are supporting)
-        description_imgs: List of description image URLs
-        description_txt: Combined text content from description
-
-    Returns:
-        int: Number of rows inserted
+    Insert scraped data into shopee_listing_products + shopee_listing_variations.
     """
     conn = connect_target_db()
 
@@ -364,7 +350,7 @@ def insert_shopee_listings(product_id, product_name, reference_links, launch_typ
         supporting_imgs = json.dumps(gallery_urls[1:]) if gallery_urls and len(gallery_urls) > 1 else None
         desc_imgs_json = json.dumps(description_imgs) if description_imgs else None
 
-        # Extract first URL from reference_links JSON (e.g. '["https://..."]' -> 'https://...')
+        # Extract first URL from reference_links JSON
         url_1688 = None
         if reference_links:
             try:
@@ -376,82 +362,46 @@ def insert_shopee_listings(product_id, product_name, reference_links, launch_typ
             except (json.JSONDecodeError, TypeError):
                 url_1688 = str(reference_links)
 
-        rows_inserted = 0
+        # 1. Insert product row into shopee_listing_products
+        query_product = """
+            INSERT INTO shopee_listing_products
+                (product_id, launch_type, item_type, `1688_url`, `1688_product_name`,
+                 `1688_hero`, `1688_supporting_image`,
+                 `1688_product_description_text`, `1688_product_description_image`,
+                 item_date, status)
+            VALUES (%s, %s, 'new_product', %s, %s, %s, %s, %s, %s, %s, 'bot')
+            ON DUPLICATE KEY UPDATE
+                `1688_url` = VALUES(`1688_url`),
+                `1688_product_name` = VALUES(`1688_product_name`),
+                `1688_hero` = VALUES(`1688_hero`),
+                `1688_supporting_image` = VALUES(`1688_supporting_image`),
+                `1688_product_description_text` = VALUES(`1688_product_description_text`),
+                `1688_product_description_image` = VALUES(`1688_product_description_image`),
+                item_date = VALUES(item_date)
+        """
+        cursor.execute(query_product, (
+            product_id, launch_type, url_1688, product_name,
+            hero_img, supporting_imgs, description_txt, desc_imgs_json, item_date,
+        ))
 
-        # If no variations, insert one row with NULL variation
-        if not variation_names or len(variation_names) == 0:
-            query = """
-                INSERT INTO shopee_listings (
-                    product_id,
-                    launch_type,
-                    `1688_url`,
-                    `1688_product_name`,
-                    `1688_variation`,
-                    `1688_variation_image`,
-                    `1688_hero`,
-                    `1688_supporting_image`,
-                    `1688_product_description_text`,
-                    `1688_product_description_image`,
-                    status,
-                    item_date
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(query, (
-                product_id,
-                launch_type,
-                url_1688,
-                product_name,
-                None,
-                None,
-                hero_img,
-                supporting_imgs,
-                description_txt,
-                desc_imgs_json,
-                'bot',
-                item_date
-            ))
-            rows_inserted = 1
-        else:
-            # Insert one row per variation
+        # 2. Insert variation rows
+        rows_inserted = 0
+        cursor.execute("DELETE FROM shopee_listing_variations WHERE product_id = %s", (product_id,))
+
+        if variation_names and len(variation_names) > 0:
             for i, var_name in enumerate(variation_names):
                 var_img = variation_imgs[i] if variation_imgs and len(variation_imgs) > i else None
-
-                query = """
-                    INSERT INTO shopee_listings (
-                        product_id,
-                        launch_type,
-                        `1688_url`,
-                        `1688_product_name`,
-                        `1688_variation`,
-                        `1688_variation_image`,
-                        `1688_hero`,
-                        `1688_supporting_image`,
-                        `1688_product_description_text`,
-                        `1688_product_description_image`,
-                        status,
-                        item_date
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                cursor.execute(query, (
-                    product_id,
-                    launch_type,
-                    url_1688,
-                    product_name,
-                    var_name,
-                    var_img,
-                    hero_img,
-                    supporting_imgs,
-                    description_txt,
-                    desc_imgs_json,
-                    'bot',
-                    item_date
-                ))
+                cursor.execute("""
+                    INSERT INTO shopee_listing_variations
+                        (product_id, sort_order, `1688_variation`, `1688_variation_image`)
+                    VALUES (%s, %s, %s, %s)
+                """, (product_id, i, var_name, var_img))
                 rows_inserted += 1
 
         conn.commit()
         cursor.close()
 
-        print(f"  [DB] Inserted {rows_inserted} row(s) into shopee_listings for: {product_name}")
+        print(f"  [DB] Inserted 1 product + {rows_inserted} variation(s) for: {product_name}")
         print(f"       - hero + {len(gallery_urls) - 1 if gallery_urls and len(gallery_urls) > 1 else 0} supporting images")
         print(f"       - {len(variation_names) if variation_names else 0} variations")
         print(f"       - {len(description_imgs) if description_imgs else 0} description images")
@@ -463,7 +413,7 @@ def insert_shopee_listings(product_id, product_name, reference_links, launch_typ
     finally:
         conn.close()
 
-# --- Fetch Product Names from Database ---
+
 def get_product_names_from_db():
     """Fetch product_id, product_name_cn, variation_list_cn, and reference_links from new_items,
     excluding products already scraped in shopee_listings table."""
@@ -479,7 +429,7 @@ def get_product_names_from_db():
               AND ni.product_name_cn != ''
               AND ni.launch_type = 'New Product'
               AND ni.product_id NOT IN (
-                  SELECT product_id FROM shopee_listings WHERE product_id IS NOT NULL
+                  SELECT product_id FROM shopee_listing_products WHERE product_id IS NOT NULL
               )
         """
         cursor.execute(query)
@@ -1350,7 +1300,7 @@ def main():
     print("="*60)
     print("1688 Order Search & Database Storage")
     print("="*60)
-    print("Data will be saved to: requestDatabase.shopee_listings")
+    print("Data will be saved to: requestDatabase.shopee_listing_products + shopee_listing_variations")
 
     # Setup driver with profile
     print("\nStarting Chrome with profile...")
