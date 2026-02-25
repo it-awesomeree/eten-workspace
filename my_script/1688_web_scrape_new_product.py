@@ -416,12 +416,12 @@ def insert_shopee_listings(product_id, product_name, reference_links, launch_typ
 
 def get_product_names_from_db():
     """Fetch product_id, product_name_cn, variation_list_cn, and reference_links from new_items,
-    excluding products already scraped in shopee_listings table."""
+    excluding products already scraped in shopee_listing_products table."""
     conn = None
     try:
         conn = connect_target_db()
         cursor = conn.cursor()
-        # Query products that haven't been scraped yet (not in shopee_listings)
+        # Query products that haven't been scraped yet (not in shopee_listing_products)
         query = """
             SELECT ni.product_id, ni.product_name_cn, ni.variation_list_cn, ni.reference_links, ni.launch_type, DATE(ni.date) AS item_date
             FROM new_items ni
@@ -1186,7 +1186,7 @@ def check_session_expired(driver):
 
 # --- Process All Products ---
 def process_products(driver, products, profile_path):
-    """Process each product: search, click, fetch data, and insert into shopee_listings."""
+    """Process each product: search, click, fetch data, and insert into shopee_listing_products + shopee_listing_variations."""
     total_success = 0
     total_fail = 0
     total_inserted = 0
