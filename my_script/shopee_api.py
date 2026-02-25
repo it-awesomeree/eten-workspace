@@ -277,8 +277,8 @@ DB_CFG_WEBAPP = dict(
 )
 
 
-def save_to_db(shop_name: str, details: Dict[str, Any]) -> None:
-    """Update product details in shopee_listing_products only if product_id exists."""
+def save_to_db(shop_name: str, details: Dict[str, Any], new_item_id: int) -> None:
+    """Update product details in shopee_listing_products by new_item_id."""
     conn = mysql.connector.connect(**DB_CFG_WEBAPP)
     cursor = conn.cursor()
     try:
@@ -309,7 +309,7 @@ def save_to_db(shop_name: str, details: Dict[str, Any]) -> None:
                 shopee_variation_images = %s,
                 tier_name_2 = %s,
                 t2_variation = %s
-            WHERE product_id = %s
+            WHERE new_item_id = %s
             """,
             (
                 details["item_name"],
@@ -319,7 +319,7 @@ def save_to_db(shop_name: str, details: Dict[str, Any]) -> None:
                 variation_images,
                 tier_name_2,
                 t2_variation,
-                details["item_id"],
+                new_item_id,
             ),
         )
         conn.commit()
@@ -415,13 +415,17 @@ def main():
         print(f"\n[INFO] Processing shop: {shop_name} (shop_id={shop_id})")
         print(f"[INFO] Items to fetch: {len(shop_items)}")
 
-        # Get product IDs for this shop
-        product_ids = [item["product_id"] for item in shop_items]
+        # Build mapping from product_id to original items (for new_item_id lookup)
+        pid_to_items: Dict[int, List[Dict[str, Any]]] = {}
+        for item in shop_items:
+            pid = item["product_id"]
+            pid_to_items.setdefault(pid, []).append(item)
+        unique_product_ids = list(pid_to_items.keys())
 
         # Batch in groups of 50 (Shopee API limit)
         batch_size = 50
-        for i in range(0, len(product_ids), batch_size):
-            batch = product_ids[i:i + batch_size]
+        for i in range(0, len(unique_product_ids), batch_size):
+            batch = unique_product_ids[i:i + batch_size]
 
             try:
                 response = fetch_item_base_info(shop_id, access_token, batch)
@@ -448,17 +452,20 @@ def main():
                     print_product_details(details)
 
                     if not DRY_RUN:
-                        try:
-                            updated = save_to_db(shop_name, details)
-                            if updated:
-                                print(f"[DB] Updated item {details['item_id']}")
-                            else:
-                                print(f"[DB] Skipped item {details['item_id']} (no matching product_id)")
-                        except Exception as db_err:
-                            print(f"[DB ERROR] Failed to save item {details['item_id']}: {db_err}")
+                        # Update all shopee_listing_products rows for this product_id
+                        matching_items = pid_to_items.get(details['item_id'], [])
+                        for orig_item in matching_items:
+                            try:
+                                updated = save_to_db(shop_name, details, orig_item["row_id"])
+                                if updated:
+                                    print(f"[DB] Updated new_item_id={orig_item['row_id']} (product_id={details['item_id']})")
+                                else:
+                                    print(f"[DB] Skipped new_item_id={orig_item['row_id']} (no matching row)")
+                            except Exception as db_err:
+                                print(f"[DB ERROR] Failed to save new_item_id={orig_item['row_id']}: {db_err}")
 
                 # Rate limiting - be nice to Shopee API
-                if i + batch_size < len(product_ids):
+                if i + batch_size < len(unique_product_ids):
                     print("[INFO] Waiting 1 second before next batch...")
                     time.sleep(1)
 
