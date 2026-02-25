@@ -278,7 +278,7 @@ DB_CFG_WEBAPP = dict(
 
 
 def save_to_db(shop_name: str, details: Dict[str, Any]) -> None:
-    """Update product details in shopee_existing_listing only if product_id exists."""
+    """Update product details in shopee_listing_products only if product_id exists."""
     conn = mysql.connector.connect(**DB_CFG_WEBAPP)
     cursor = conn.cursor()
     try:
@@ -301,9 +301,8 @@ def save_to_db(shop_name: str, details: Dict[str, Any]) -> None:
 
         cursor.execute(
             """
-            UPDATE shopee_existing_listing
-            SET shop_name = %s,
-                shopee_product_name = %s,
+            UPDATE shopee_listing_products
+            SET shopee_product_name = %s,
                 shopee_description = %s,
                 tier_name_1 = %s,
                 t1_variation = %s,
@@ -313,7 +312,6 @@ def save_to_db(shop_name: str, details: Dict[str, Any]) -> None:
             WHERE product_id = %s
             """,
             (
-                shop_name,
                 details["item_name"],
                 details["description"],
                 tier_name_1,
@@ -478,7 +476,7 @@ def main():
     if DRY_RUN:
         print("\n[DRY RUN] No data was written to database.")
     else:
-        print(f"\n[INFO] Data saved to requestDatabase.shopee_existing_listing")
+        print(f"\n[INFO] Data saved to requestDatabase.shopee_listing_products")
 
 
 if __name__ == "__main__":
