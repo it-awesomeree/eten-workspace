@@ -374,12 +374,12 @@ def connect_db():
 
 
 def connect_target_db():
-    """Connect to requestDatabase database for writing to shopee_existing_listing."""
+    """Connect to requestDatabase database for writing to shopee_listing_products."""
     return mysql.connector.connect(
         host=os.environ.get("DB_HOST", "localhost"),
         user="root",
         password=os.environ["DB_PASSWORD"],
-        database="requestDatabase",  # Use requestDatabase to write to webapp_test.shopee_existing_listing via cross-database query
+        database="requestDatabase",  # Use requestDatabase to write to shopee_listing_products
         port=3306
     )
 
@@ -445,7 +445,7 @@ def get_product_names_from_db():
         conn = connect_target_db()
         cursor = conn.cursor()
         # Fetch New Variation rows that don't yet have a matching row in
-        # shopee_existing_listing (matched by product_id + 1688_url).
+        # shopee_listing_products (matched by product_id unique key).
         # Also fetches already-scraped sibling rows (same product_id, different 1688 URL)
         # so the full picture is visible in logs.
         query = """
@@ -513,7 +513,7 @@ def get_product_names_from_db():
                     group["variations"].append(var)
             group["new_items_ids"].append(ni_id)
 
-        # Filter out url_groups that already exist in shopee_existing_listing
+        # Filter out url_groups that already exist in shopee_listing_products
         # (matched by product_id + 1688_url composite key)
         cursor2 = conn.cursor()
         cursor2.execute("SELECT product_id, `1688_url` FROM shopee_listing_products WHERE `1688_url` IS NOT NULL")
@@ -1342,7 +1342,7 @@ def check_session_expired(driver):
 def process_products(driver, products_dict, profile_path):
     """
     Process products grouped by product_id and 1688 source URL.
-    Each url_group writes its own row to shopee_existing_listing.
+    Each url_group upserts shopee_listing_products + shopee_listing_variations.
 
     Args:
         driver: Selenium WebDriver
@@ -1415,7 +1415,7 @@ def process_products(driver, products_dict, profile_path):
             # Fetch description content
             description_imgs, _description_txt = fetch_description_content(driver)
 
-            # Write this group's data to shopee_existing_listing (one row per 1688 source)
+            # Write this group's data to shopee_listing_products + shopee_listing_variations
             print(f"\n  Writing to shopee_listing_products + shopee_listing_variations...")
             rows_affected = update_existing_listing(
                 product_id,
