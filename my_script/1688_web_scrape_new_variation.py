@@ -384,7 +384,7 @@ def connect_target_db():
     )
 
 
-def update_existing_listing(product_id, url_1688, product_name, variation_names, variation_imgs, description_imgs, item_date=None):
+def update_existing_listing(product_id, new_item_id, url_1688, product_name, variation_names, variation_imgs, description_imgs, item_date=None):
     """
     Upsert scraped 1688 data into shopee_listing_products + shopee_listing_variations.
     """
@@ -396,28 +396,29 @@ def update_existing_listing(product_id, url_1688, product_name, variation_names,
         # 1. Upsert shopee_listing_products (one row per product_id)
         query_product = """
             INSERT INTO shopee_listing_products
-                (product_id, launch_type, item_type, `1688_url`, `1688_product_name`,
+                (product_id, new_item_id, launch_type, item_type, `1688_url`, `1688_product_name`,
                  `1688_product_description_image`, item_date, status)
-            VALUES (%s, 'New Variation', 'new_variation', %s, %s, %s, %s, 'bot')
+            VALUES (%s, %s, 'New Variation', 'new_variation', %s, %s, %s, %s, 'bot')
             ON DUPLICATE KEY UPDATE
+                product_id = VALUES(product_id),
                 `1688_url` = VALUES(`1688_url`),
                 `1688_product_name` = VALUES(`1688_product_name`),
                 `1688_product_description_image` = VALUES(`1688_product_description_image`),
                 item_date = VALUES(item_date)
         """
-        cursor.execute(query_product, (product_id, url_1688, product_name, desc_imgs_json, item_date))
+        cursor.execute(query_product, (product_id, new_item_id, url_1688, product_name, desc_imgs_json, item_date))
         affected = cursor.rowcount
 
         # 2. Replace variations: delete old, insert new
-        cursor.execute("DELETE FROM shopee_listing_variations WHERE product_id = %s", (product_id,))
+        cursor.execute("DELETE FROM shopee_listing_variations WHERE new_item_id = %s", (new_item_id,))
         if variation_names:
             for i, var_name in enumerate(variation_names):
                 var_img = variation_imgs[i] if variation_imgs and len(variation_imgs) > i else None
                 cursor.execute("""
                     INSERT INTO shopee_listing_variations
-                        (product_id, sort_order, `1688_variation`, `1688_variation_image`)
-                    VALUES (%s, %s, %s, %s)
-                """, (product_id, i, var_name, var_img))
+                        (product_id, new_item_id, sort_order, `1688_variation`, `1688_variation_image`)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (product_id, new_item_id, i, var_name, var_img))
 
         conn.commit()
         cursor.close()
@@ -516,7 +517,7 @@ def get_product_names_from_db():
         # Filter out url_groups that already exist in shopee_listing_products
         # (matched by product_id + 1688_url composite key)
         cursor2 = conn.cursor()
-        cursor2.execute("SELECT product_id, `1688_url` FROM shopee_listing_products WHERE `1688_url` IS NOT NULL")
+        cursor2.execute("SELECT new_item_id, `1688_url` FROM shopee_listing_products WHERE `1688_url` IS NOT NULL")
         existing = set()
         for r in cursor2.fetchall():
             existing.add((r[0], r[1]))
@@ -526,8 +527,9 @@ def get_product_names_from_db():
         for product_id, info in list(products.items()):
             for group_key, group_data in list(info["url_groups"].items()):
                 url = group_data["url"]
-                if url and (product_id, url) in existing:
-                    print(f"  [SKIP] Already scraped: product_id={product_id}, 1688_url={url}")
+                ni_ids_in_group = group_data["new_items_ids"]
+                if url and all((ni_id, url) in existing for ni_id in ni_ids_in_group):
+                    print(f"  [SKIP] Already scraped: product_id={product_id}, 1688_url={url}, new_item_ids={ni_ids_in_group}")
                     del info["url_groups"][group_key]
             # Remove product_id entirely if no url_groups left
             if not info["url_groups"]:
@@ -861,7 +863,7 @@ def fetch_sku_images(driver, variation_list_cn):
 
     Args:
         driver: Selenium WebDriver instance
-        variation_list_cn: JSON string like '["刀叉勺", "咖啡色", "纯黑色"]'
+        variation_list_cn: JSON string like '["\u7ea2\u8272", "\u84dd\u8272", "\u7eff\u8272"]'
 
     Returns:
         list: Ordered list of image URLs matching variation_list_cn order
@@ -1417,17 +1419,19 @@ def process_products(driver, products_dict, profile_path):
 
             # Write this group's data to shopee_listing_products + shopee_listing_variations
             print(f"\n  Writing to shopee_listing_products + shopee_listing_variations...")
-            rows_affected = update_existing_listing(
-                product_id,
-                url,                # 1688_url -- part of composite unique key
-                group_product_name,
-                group_variations,
-                variation_imgs,
-                description_imgs if description_imgs else [],
-                item_date
-            )
-            if rows_affected > 0:
-                total_updated += 1
+            for ni_id in ni_ids:
+                rows_affected = update_existing_listing(
+                    product_id,
+                    ni_id,
+                    url,                # 1688_url
+                    group_product_name,
+                    group_variations,
+                    variation_imgs,
+                    description_imgs if description_imgs else [],
+                    item_date
+                )
+                if rows_affected > 0:
+                    total_updated += 1
 
             any_group_succeeded = True
             print(f"  [OK] Source {group_key} done")
