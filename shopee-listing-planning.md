@@ -90,6 +90,8 @@ new_items (94)
 | 5 | Shopee API is UPDATE-only (no INSERT) | If 1688 scraper hasn't run, Shopee data is silently lost |
 | 6 | 94 New Variation items in `new_items` but only 19 in `shopee_listing_products` | 75 items not in the system at all |
 | 7 | All 19 new_variation items in `shopee_listing_products` have zero n8n output | Variation generation has never run through normalized path |
+| **8** | **`UNIQUE(product_id)` causes data collisions between new_product and new_variation events** | **Same product_id overwrites — see PART E** |
+| **9** | **Multiple new_variation events per product_id collide** | **8 product_ids have 2-3 new_variation events that overwrite each other — see PART E** |
 
 ---
 
@@ -188,7 +190,9 @@ Confirmed: Composite unique index `uq_product_1688url` on `(product_id, 1688_url
 
 ---
 
-## Phase 1: Create & Deploy Migration Files
+## Phase 1: Create & Deploy Migration Files (Shopee Columns)
+
+> **STATUS: DONE** — 7 Shopee columns already exist on `requestDatabase.shopee_listing_products`.
 
 **Objective**: Create migration SQL files for schema changes and deploy through the proper migration pipeline (test → staging validation → main → production).
 
@@ -417,6 +421,9 @@ For any results: these items need product rows created in `shopee_listing_produc
 
 ## Phase 3: Update Python Scripts
 
+> **STATUS: DONE** — All 3 scripts updated and pushed to `it-awesomeree/eten-workspace` main branch.
+> **NOTE**: These scripts currently write by `product_id`. They need to be updated AGAIN in Part E (Phase E3) to write by `new_item_id` instead.
+
 **Objective**: Redirect both scripts to write to the normalized tables instead of `shopee_existing_listing`.
 
 ### Step 3.1 — Update `1688_web_scrape_new_variation.py`
@@ -598,6 +605,8 @@ Both scripts can now run in any order:
 
 ## Phase 4: Update Backend Service Layer
 
+> **STATUS: PARTIALLY DONE** — Changes pushed to `test` branch but need rework for `new_item_id` (Part E).
+
 **Objective**: Make the web app's backend read the new Shopee columns and include them in the n8n webhook payload for variation generation.
 
 **Repo**: `it-awesomeree/awesomeree-web-app`
@@ -738,6 +747,8 @@ shopeeExistingTiers?: {
 ---
 
 ## Phase 5: Update Frontend
+
+> **STATUS: PARTIALLY DONE** — Changes pushed to `test` branch but need rework for `new_item_id` (Part E).
 
 **Objective**: Display the Shopee existing listing data in the detail panel for New Variation items.
 
@@ -959,28 +970,28 @@ Update this document with completion status and any changes made during implemen
 | 0.1 | Prep | Back up tables | TODO | |
 | 0.2 | Prep | Verify FK constraint | DONE | |
 | 0.3 | Prep | Verify unique index | DONE | |
-| 1.1 | Migration | Create `20260225000000_add_shopee_columns_to_listing_products.sql` | TODO | |
-| 1.2 | Migration | Update `atlas.sum` | TODO | |
-| 1.3 | Migration | Push to `test` branch (staging) | TODO | |
-| 1.4 | Migration | Validate 7 new columns on staging (`webapp_test`) | TODO | |
-| 1.5 | Migration | Push to `main` branch (production) | TODO | |
-| 1.6 | Migration | Verify 7 new columns on production (`requestDatabase`) | TODO | |
-| 2.1 | Data Migration | Copy Shopee data to normalized | TODO | |
-| 2.2 | Data Migration | Copy 1688 desc images | TODO | |
-| 2.3 | Data Migration | Verify migration | TODO | |
+| 1.1 | Migration | Create `20260225000000_add_shopee_columns_to_listing_products.sql` | DONE | |
+| 1.2 | Migration | Update `atlas.sum` | DONE | |
+| 1.3 | Migration | Push to `test` branch (staging) | DONE | |
+| 1.4 | Migration | Validate 7 new columns on staging (`webapp_test`) | DONE | |
+| 1.5 | Migration | Push to `main` branch (production) | DONE | |
+| 1.6 | Migration | Verify 7 new columns on production (`requestDatabase`) | DONE | |
+| 2.1 | Data Migration | Copy Shopee data to normalized | DONE | |
+| 2.2 | Data Migration | Copy 1688 desc images | DONE | |
+| 2.3 | Data Migration | Verify migration | DONE | |
 | 2.4 | Data Migration | Handle orphan items | TODO | |
-| 3.1 | Scripts | Update 1688 variation scraper | TODO | |
-| 3.2 | Scripts | Update Shopee API script | TODO | |
+| 3.1 | Scripts | Update 1688 variation scraper | DONE (needs rework for new_item_id) | |
+| 3.2 | Scripts | Update Shopee API script | DONE (needs rework for new_item_id) | |
 | 3.3 | Scripts | Test script execution order | TODO | |
-| 4.1 | Backend | Update types.ts | TODO | |
+| 4.1 | Backend | Update types.ts | DONE (on test branch, needs rework) | |
 | 4.2 | Backend | Update normalizers.ts | TODO | |
-| 4.3 | Backend | Update generate.ts — detail | TODO | |
-| 4.4 | Backend | Update generate.ts — webhook payload | TODO | |
-| 4.5 | Backend | Verify summary (no change needed) | TODO | |
-| 4.6 | Backend | Update frontend types | TODO | |
-| 5.1 | Frontend | Add Shopee Existing accordion | TODO | |
-| 5.2 | Frontend | Conditional rendering | TODO | |
-| 5.3 | Frontend | Tier display component | TODO | |
+| 4.3 | Backend | Update generate.ts — detail | DONE (on test branch, needs rework) | |
+| 4.4 | Backend | Update generate.ts — webhook payload | DONE (on test branch, needs rework) | |
+| 4.5 | Backend | Verify summary (no change needed) | DONE | |
+| 4.6 | Backend | Update frontend types | DONE (on test branch, needs rework) | |
+| 5.1 | Frontend | Add Shopee Existing / hide competitors | DONE (on test branch, needs rework) | |
+| 5.2 | Frontend | Conditional rendering | DONE (on test branch, needs rework) | |
+| 5.3 | Frontend | Tier display component | DONE (on test branch, needs rework) | |
 | 6.1 | n8n | Update variation generate webhook | TODO | |
 | 6.2 | n8n | Update AI prompt nodes | TODO | |
 | 6.3 | n8n | Update variation regenerate webhook | TODO | |
@@ -1047,7 +1058,8 @@ migrations/request/
   20260224000004_formalize_hero_templates.sql
   20260224000005_migrate_data.js     — Data migration script (JS, not SQL)
   20260224000006_create_compat_view.sql
-  20260225000000_add_shopee_columns_to_listing_products.sql  ← NEW (this plan)
+  20260225000000_add_shopee_columns_to_listing_products.sql
+  20260225000001_add_new_item_id.sql  ← NEW (Part E migration)
 ```
 
 ## D2. n8n Webhooks
@@ -1078,3 +1090,482 @@ Create SQL file → Push to test branch → Staging validates → Push to main b
 - **Style**: Idempotent (check column exists before ALTER)
 - **Checksum**: `atlas.sum` with `h1:placeholder` entries
 - **Branch flow**: `test` → staging validation → `main` → production
+
+---
+
+# PART E — CRITICAL SCHEMA REDESIGN: `new_item_id`
+
+> **Added**: 25 Feb 2026
+> **Status**: READY FOR REVIEW — Must be executed before Phase 4-5 rework
+> **Priority**: BLOCKING — This supersedes the `product_id`-based approach in Phases 3-5
+
+## E1. Problem Discovery
+
+During testing of Phase 4-5 changes (backend + frontend on `test` branch), two critical issues were found:
+
+### Issue 1: Data collision between new_product and new_variation
+
+The same `product_id` can appear in `new_items` as **both** New Product and New Variation. Since `shopee_listing_products` has `UNIQUE(product_id)`, only ONE row exists. Whichever scraper runs last overwrites the other's data.
+
+**Result**: 1688 data from new_product (e.g., glue gun hero image) gets mixed with Shopee API data from new_variation (e.g., Expanding Foam description). The frontend shows garbage mixed data.
+
+### Issue 2: Some new_variation items display competitor data incorrectly
+
+Because the single DB row has `item_type` from whichever scraper ran last, clicking a "New Variation" row in the frontend sometimes gets `item_type = 'new_product'` from the DB, causing competitor data to display when it shouldn't.
+
+### Issue 3: Missing variation data
+
+For product_id 9193675690, the actual new variation "900g/750ml加强" is NOT in `shopee_listing_variations`. The 3 variations shown are from the new_product scraper (glue gun variations). The new_variation's 1688 data was overwritten.
+
+## E2. Investigation Findings (25 Feb 2026)
+
+### Database counts
+
+| Metric | Count |
+|---|---|
+| `new_items` total rows | **565** |
+| `new_items` unique product_ids | **447** |
+| `new_items` launch_type = New Product | **469** |
+| `new_items` launch_type = New Variation | **94** |
+| `new_items` launch_type = New Product (SG) | **2** |
+| `shopee_listing_products` total rows | **331** |
+| `shopee_listing_products` item_type = new_product | **304** |
+| `shopee_listing_products` item_type = new_variation | **27** |
+| `shopee_listing_variations` total rows | **1940** |
+
+### Collision analysis
+
+| Collision Type | Count | Impact |
+|---|---|---|
+| Product_ids with BOTH new_product + new_variation | **28** | Data overwritten between workflows |
+| Product_ids with multiple new_variation events | **8** (18 total events) | New variation events overwrite each other |
+| Product_ids with multiple new_product events | **48** | New product events overwrite each other |
+| Product_ids with item_type mismatch in DB | **~20** | DB says new_variation but 1688 data is actually from new_product scraper |
+
+### The 8 product_ids with multiple new_variation events
+
+These are the reason `UNIQUE(product_id, item_type)` would NOT work either:
+
+| product_id | # of New Variation events |
+|---|---|
+| 28079888416 | 3 |
+| 22581507419 | 3 |
+| 8390619505 | 2 |
+| 18880804735 | 2 |
+| 10059817794 | 2 |
+| 22055995385 | 2 |
+| 25507762456 | 2 |
+| 27789585481 | 2 |
+
+### Case study: product_id 9193675690
+
+**What's in `new_items` (3 events):**
+
+| new_items.id | launch_type | product_name_en | date |
+|---|---|---|---|
+| 397 | New Product | Manual Glue Gun (NEW) | 2025-09-29 |
+| 429 | New Product | Toilet Cleaner | 2025-10-06 |
+| 485 | New Variation | Expanding Foam | 2025-10-22 |
+
+**What's in `shopee_listing_products` (only 1 row due to UNIQUE):**
+- `id=3`, `item_type=new_variation`, but `launch_type=New Product` (contradicts itself!)
+- `1688_product_name` = "手动玻璃胶枪..." (Glue Gun — from ni=397, wrong!)
+- `1688_hero` = Glue gun hero image (wrong for new_variation!)
+- `shopee_product_name` = "Vira PU Foam Spray..." (correct Shopee API data)
+- Has 15 Shopee tier variations (Vira Foam 750ML, etc.)
+
+**What's in `shopee_listing_variations` (3 rows — all wrong for new_variation):**
+- `id=10`: "发泡胶枪塑料橙色一件40把" (foam gun — from new_product scraper)
+- `id=11`: "蓝瓶" (blue bottle — from new_product scraper)
+- `id=12`: "粉瓶" (pink bottle — from new_product scraper)
+
+**What's MISSING:**
+- The actual new variation "900g/750ml加强" is NOT anywhere in `shopee_listing_variations`
+- No separate rows for ni=397 (Glue Gun new_product) and ni=429 (Toilet Cleaner new_product)
+
+## E3. Why Current Approaches Fail
+
+### Approach 1: `UNIQUE(product_id)` — Current (FAILS)
+
+Only 1 row per product. 3 events for product_id 9193675690 all fight for the same row. Last writer wins.
+
+### Approach 2: `UNIQUE(product_id, item_type)` — Considered (ALSO FAILS)
+
+Would allow 2 rows per product (one new_product, one new_variation). But:
+- **8 product_ids have MULTIPLE new_variation events** (e.g., 28079888416 has 3)
+- All 3 new_variation events would fight for `(28079888416, 'new_variation')` — same collision
+- **48 product_ids have multiple new_product events** — same problem on new_product side
+
+### Approach 3: `UNIQUE(new_item_id)` — Proposed (WORKS)
+
+Each `new_items.id` is globally unique. Using it as the unique key means:
+- Every event gets its own completely isolated row
+- No collisions regardless of how many events share a product_id
+- Works for unlimited future new_variation additions
+
+## E4. Solution: `new_item_id` Column
+
+### Core change
+
+Add `new_item_id BIGINT NOT NULL` to both tables. This references `new_items.id` and becomes the new unique key.
+
+```
+BEFORE:  shopee_listing_products   UNIQUE(product_id)
+AFTER:   shopee_listing_products   UNIQUE(new_item_id), INDEX(product_id)
+
+BEFORE:  shopee_listing_variations  FK(product_id) → products.product_id
+AFTER:   shopee_listing_variations  INDEX(new_item_id), INDEX(product_id)
+```
+
+### What stays the same
+
+- `product_id` column stays (for reference, display, grouping) — just no longer unique
+- All existing data columns stay (1688_*, shopee_*, n8n_*)
+- The column meanings are identical — the difference is each event populates its own row
+
+### New data model
+
+```
+new_items (id=397, product_id=9193675690, "New Product", "Glue Gun")
+    → shopee_listing_products  (new_item_id=397, item_type='new_product')
+    → shopee_listing_variations (new_item_id=397, 3 glue gun variations)
+
+new_items (id=429, product_id=9193675690, "New Product", "Toilet Cleaner")
+    → shopee_listing_products  (new_item_id=429, item_type='new_product')
+    → shopee_listing_variations (new_item_id=429, toilet cleaner variations)
+
+new_items (id=485, product_id=9193675690, "New Variation", "Expanding Foam")
+    → shopee_listing_products  (new_item_id=485, item_type='new_variation')
+    → shopee_listing_variations (new_item_id=485, 1 variation: "900g/750ml加强")
+```
+
+Each event is **completely isolated**. No overwriting. No conflicts.
+
+## E5. Proof: Isolation Walkthrough
+
+### After migration, product_id 9193675690 will have:
+
+**`shopee_listing_products` (3 rows):**
+
+| new_item_id | product_id | item_type | 1688_product_name | shopee_product_name | n8n_product_name |
+|---|---|---|---|---|---|
+| 397 | 9193675690 | new_product | 手动玻璃胶枪... (Glue Gun) | NULL | (from n8n) |
+| 429 | 9193675690 | new_product | (Toilet Cleaner 1688 data) | NULL | (from n8n) |
+| 485 | 9193675690 | new_variation | (Expanding Foam 1688 data) | Vira PU Foam Spray... | NULL (not output) |
+
+**`shopee_listing_variations`:**
+
+| new_item_id | 1688_variation | n8n_variation |
+|---|---|---|
+| 397 | 发泡胶枪塑料橙色... | (from n8n) |
+| 397 | 蓝瓶 | (from n8n) |
+| 397 | 粉瓶 | (from n8n) |
+| 429 | (Toilet Cleaner vars) | (from n8n) |
+| 485 | 900g/750ml加强 | (from n8n) |
+
+### Click behavior:
+
+1. **Click "New Product" row (ni=397, Glue Gun)**
+   - `SELECT * FROM shopee_listing_products WHERE new_item_id = 397` → Glue gun 1688 data
+   - `SELECT * FROM shopee_listing_variations WHERE new_item_id = 397` → 3 glue gun variations
+   - Fetch competitors from Shopee_Comp → Shows competitor cards
+   - Generate → Sends **6 fields** to n8n: product_name + desc + hero + supporting + variations
+
+2. **Click "New Product" row (ni=429, Toilet Cleaner)**
+   - Completely separate data. Different 1688 source, different variations.
+
+3. **Click "New Variation" row (ni=485, Expanding Foam)**
+   - `SELECT * FROM shopee_listing_products WHERE new_item_id = 485` → Expanding foam 1688 + Shopee data
+   - `SELECT * FROM shopee_listing_variations WHERE new_item_id = 485` → **ONLY** "900g/750ml加强"
+   - **NO competitor fetch** (it's new_variation)
+   - Generate → Sends **3 fields** to n8n: desc + variations only (no product_name/hero/supporting)
+
+### Multiple new_variation proof (product_id 28079888416 with 3 events):
+
+Each new_variation event gets its own row:
+- Event #1: Adds color variations → new_item_id=X, own 1688 data, own variations
+- Event #2: Adds size variations → new_item_id=Y, own 1688 data, own variations
+- Event #3: Adds material variations → new_item_id=Z, own 1688 data, own variations
+
+Completely isolated. Can generate each independently.
+
+## E6. n8n Output Differences (Why Isolation Matters)
+
+| n8n Output Field | DB Column | New Product | New Variation |
+|---|---|---|---|
+| n8n_product_name | products.n8n_product_name | **YES** | NO (stays NULL) |
+| n8n_product_description | products.n8n_product_description | **YES** | **YES** |
+| n8n_hero | products.n8n_hero | **YES** | NO (stays NULL) |
+| n8n_supporting_image | products.n8n_supporting_image | **YES** | NO (stays NULL) |
+| n8n_variation | variations.n8n_variation | **YES** | **YES** |
+| n8n_variation_image | variations.n8n_variation_image | **YES** | **YES** |
+
+If they share one row, you can't tell which output belongs to which workflow. With `new_item_id`, each row knows exactly what it is.
+
+## E7. Migration SQL
+
+### Migration file: `20260225000001_add_new_item_id.sql`
+
+> Deploy via the migration pipeline: `test` branch → staging validation → `main` branch → production
+
+```sql
+-- 20260225000001_add_new_item_id.sql
+-- Adds new_item_id column to shopee_listing_products and shopee_listing_variations
+-- to support multiple events per product_id (idempotent)
+
+-- ============================================================
+-- STEP 1: Add new_item_id column to products table
+-- ============================================================
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'new_item_id');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_products` ADD COLUMN `new_item_id` BIGINT NULL AFTER `id`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- STEP 2: Add new_item_id column to variations table
+-- ============================================================
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_variations'
+  AND COLUMN_NAME = 'new_item_id');
+SET @sql = IF(@col = 0,
+  'ALTER TABLE `shopee_listing_variations` ADD COLUMN `new_item_id` BIGINT NULL AFTER `product_id`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+```
+
+### Post-migration data script (run manually after migration deploys)
+
+> Similar to `20260224000005_migrate_data.js` — run as a one-time manual operation.
+
+```sql
+-- ============================================================
+-- STEP 3: Backfill new_item_id for existing products
+-- Match by product_id + item_type, pick most recent new_items row
+-- ============================================================
+UPDATE shopee_listing_products p
+SET p.new_item_id = (
+  SELECT ni.id
+  FROM new_items ni
+  WHERE CAST(ni.product_id AS CHAR) = CAST(p.product_id AS CHAR)
+    AND (
+      (p.item_type = 'new_product' AND ni.launch_type IN ('New Product', 'New Product (SG)'))
+      OR (p.item_type = 'new_variation' AND ni.launch_type = 'New Variation')
+    )
+  ORDER BY ni.date DESC, ni.id DESC
+  LIMIT 1
+)
+WHERE p.new_item_id IS NULL;
+
+-- For rows where item_type doesn't match any new_items launch_type,
+-- fall back to most recent new_items row for that product_id
+UPDATE shopee_listing_products p
+SET p.new_item_id = (
+  SELECT ni.id
+  FROM new_items ni
+  WHERE CAST(ni.product_id AS CHAR) = CAST(p.product_id AS CHAR)
+  ORDER BY ni.date DESC, ni.id DESC
+  LIMIT 1
+)
+WHERE p.new_item_id IS NULL;
+
+-- ============================================================
+-- STEP 4: Backfill new_item_id for existing variations
+-- Copy from parent product row
+-- ============================================================
+UPDATE shopee_listing_variations v
+JOIN shopee_listing_products p ON v.product_id = p.product_id
+SET v.new_item_id = p.new_item_id
+WHERE v.new_item_id IS NULL;
+
+-- ============================================================
+-- STEP 5: Verify — check for orphans
+-- ============================================================
+-- Any products still NULL?
+SELECT p.id, p.product_id, p.item_type, p.new_item_id
+FROM shopee_listing_products p
+WHERE p.new_item_id IS NULL;
+-- → Delete if any (stale data with no source event)
+
+-- Any variations still NULL?
+SELECT v.id, v.product_id, v.new_item_id
+FROM shopee_listing_variations v
+WHERE v.new_item_id IS NULL;
+-- → Delete if any
+```
+
+### Constraint switch migration: `20260225000002_switch_unique_to_new_item_id.sql`
+
+> Deploy AFTER backfill is complete and verified (no NULL new_item_id rows remain).
+
+```sql
+-- 20260225000002_switch_unique_to_new_item_id.sql
+-- Switches unique key from product_id to new_item_id (idempotent)
+
+-- ============================================================
+-- STEP 1: Make new_item_id NOT NULL
+-- ============================================================
+SET @col = (SELECT IS_NULLABLE FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND COLUMN_NAME = 'new_item_id');
+SET @sql = IF(@col = 'YES',
+  'ALTER TABLE `shopee_listing_products` MODIFY COLUMN `new_item_id` BIGINT NOT NULL',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col = (SELECT IS_NULLABLE FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_variations'
+  AND COLUMN_NAME = 'new_item_id');
+SET @sql = IF(@col = 'YES',
+  'ALTER TABLE `shopee_listing_variations` MODIFY COLUMN `new_item_id` BIGINT NOT NULL',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- STEP 2: Drop old FK on variations (references old UNIQUE on product_id)
+-- ============================================================
+SET @fk = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_variations'
+  AND CONSTRAINT_NAME = 'fk_variation_product');
+SET @sql = IF(@fk > 0,
+  'ALTER TABLE `shopee_listing_variations` DROP FOREIGN KEY `fk_variation_product`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- STEP 3: Drop old UNIQUE on product_id, add new UNIQUE on new_item_id
+-- ============================================================
+SET @idx = (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND INDEX_NAME = 'uk_product_id');
+SET @sql = IF(@idx > 0,
+  'ALTER TABLE `shopee_listing_products` DROP INDEX `uk_product_id`',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx = (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND INDEX_NAME = 'uk_new_item');
+SET @sql = IF(@idx = 0,
+  'ALTER TABLE `shopee_listing_products` ADD UNIQUE KEY `uk_new_item` (`new_item_id`)',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- STEP 4: Add regular INDEX on product_id (for lookups/grouping)
+-- ============================================================
+SET @idx = (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_products'
+  AND INDEX_NAME = 'idx_product_id');
+SET @sql = IF(@idx = 0,
+  'ALTER TABLE `shopee_listing_products` ADD INDEX `idx_product_id` (`product_id`)',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ============================================================
+-- STEP 5: Add INDEX on new_item_id for variations table
+-- ============================================================
+SET @idx = (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'shopee_listing_variations'
+  AND INDEX_NAME = 'idx_new_item');
+SET @sql = IF(@idx = 0,
+  'ALTER TABLE `shopee_listing_variations` ADD INDEX `idx_new_item` (`new_item_id`)',
+  'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+```
+
+## E8. Code Changes Required (After Schema Migration)
+
+### Python Scripts (Phase E3 — rework of Phase 3)
+
+All 3 scripts already iterate over `new_items` rows, so they have `new_items.id`. They need to:
+
+| Script | Current write key | New write key | Changes |
+|---|---|---|---|
+| `1688_web_scrape_new_product.py` | `product_id` | `new_item_id` | UPSERT products ON DUPLICATE KEY (new_item_id), DELETE+INSERT variations WHERE new_item_id |
+| `1688_web_scrape_new_variation.py` | `product_id` | `new_item_id` | Same pattern |
+| `shopee_api.py` | `product_id` | `new_item_id` | UPDATE WHERE new_item_id = ? |
+
+**Key change in each script:**
+1. Pass `new_items.id` (already available in the loop) as `new_item_id`
+2. `INSERT INTO shopee_listing_products (new_item_id, product_id, ...) ON DUPLICATE KEY UPDATE ...`
+3. `DELETE FROM shopee_listing_variations WHERE new_item_id = ?` (not product_id)
+4. `INSERT INTO shopee_listing_variations (new_item_id, product_id, ...) VALUES ...`
+
+### Webapp Backend (Phase E4 — rework of Phase 4)
+
+| Function | Current | New |
+|---|---|---|
+| Summary builder | `productRowMap.get(productId)` | `productRowMap.get(newItemId)` — join products ON new_item_id |
+| `fetchProduct()` | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `fetchVariations()` | `WHERE product_id = ?` | `WHERE new_item_id = ?` |
+| `buildGeneratePayload()` | fetch by product_id | fetch by new_item_id |
+| `fetchShopeeListingDetail()` | fetch by product_id | fetch by new_item_id |
+
+**Simplification**: The `itemType` parameter hack (passing itemType from frontend to override DB value) is no longer needed. Each `new_item_id` uniquely identifies the event AND its correct item_type.
+
+### Webapp Frontend (Phase E5 — rework of Phase 5)
+
+| Component | Current | New |
+|---|---|---|
+| Summary row data | Has `productId` + `itemType` | Also include `newItemId` (from new_items.id) |
+| Row click handler | `loadProductDetail(productId, itemType)` | `loadProductDetail(newItemId)` — simpler! |
+| Detail API call | `?productId=X&itemType=Y` | `?newItemId=X` — single param |
+| useProductDetail hook | `loadProductDetail(productId, itemType)` | `loadProductDetail(newItemId)` |
+
+### API Route
+
+```
+GET /api/shopee-listings?newItemId=485
+  → fetchShopeeListingDetail(newItemId=485)
+  → Returns: product data + variations for this specific event
+```
+
+## E9. Implementation Order
+
+| Step | What | Depends On | Status |
+|---|---|---|---|
+| E1 | Create migration `20260225000001_add_new_item_id.sql` | — | TODO |
+| E2 | Push to `test` → validate on staging | E1 | TODO |
+| E3 | Push to `main` → deploy to production | E2 | TODO |
+| E4 | Run backfill script (Step 3-4-5 from E7) | E3 | TODO |
+| E5 | Verify no NULL new_item_id rows remain | E4 | TODO |
+| E6 | Create migration `20260225000002_switch_unique_to_new_item_id.sql` | E5 | TODO |
+| E7 | Push constraint switch to `test` → validate | E6 | TODO |
+| E8 | Push constraint switch to `main` → deploy | E7 | TODO |
+| E9 | Update Python scripts to write by new_item_id | E8 | TODO |
+| E10 | Update webapp backend (generate.ts) | E8 | TODO |
+| E11 | Update webapp frontend (page.tsx, hooks) | E10 | TODO |
+| E12 | Re-trigger scrapers for events with missing data | E9 | TODO |
+| E13 | Verify using checklist below | E12 | TODO |
+
+## E10. Verification Checklist
+
+After full implementation, verify:
+
+- [ ] `shopee_listing_products` has UNIQUE on `new_item_id` (not product_id)
+- [ ] `shopee_listing_products.product_id` is a regular INDEX (not unique)
+- [ ] product_id 9193675690 has 3 separate rows (ni=397, 429, 485)
+- [ ] ni=397 row: item_type=new_product, 1688 data = Glue Gun, no Shopee data
+- [ ] ni=429 row: item_type=new_product, 1688 data = Toilet Cleaner, no Shopee data
+- [ ] ni=485 row: item_type=new_variation, 1688 data = Expanding Foam, Shopee data present
+- [ ] ni=485 variations: ONLY "900g/750ml加强" (1 row, not 3)
+- [ ] Clicking ni=397 row: shows competitors, shows 3 glue gun variations
+- [ ] Clicking ni=485 row: shows Shopee data card (no competitors), shows 1 variation
+- [ ] n8n generate for ni=397: sends product_name + desc + hero + supporting + variations (6 fields)
+- [ ] n8n generate for ni=485: sends only desc + variations (3 fields, no product_name/hero/supporting)
+- [ ] product_id 28079888416: 3 separate new_variation rows, each with own 1688 data + variations
+- [ ] Multiple new_variation events for same product_id are fully isolated
+- [ ] Python scrapers write by new_item_id (no product_id collision)
+- [ ] Frontend uses `?newItemId=X` (not `?productId=X&itemType=Y`)
