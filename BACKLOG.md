@@ -8,7 +8,8 @@ Prioritized parking lot for ideas, deferred tasks, and improvements. Organized b
 
 | # | Item | Priority | Status | Notes |
 |---|------|----------|--------|-------|
-| 1 | _Add items as they come up_ | — | — | — |
+| 1 | Verify all 285 missing events populated after scraper re-run completes | High | Open | Run Step 4 verification queries from data cleanup plan. Check product_id 9193675690 has 3 rows |
+| 2 | Update verification checklist item_type for ni=429 (Toilet Cleaner = new_variation, not new_product) | Low | Open | Planning doc checklist line says ni=429 is new_product but it's actually New Variation |
 
 ---
 
@@ -52,4 +53,5 @@ Prioritized parking lot for ideas, deferred tasks, and improvements. Organized b
 
 | # | Item | Domain | Completed | Notes |
 |---|------|--------|-----------|-------|
-| — | — | — | — | — |
+| 1 | Data cleanup: fix item_type mismatches + delete collision data | Database | 2026-02-26 | Steps 1-2 of data cleanup plan. Ran on both requestDatabase and webapp_test |
+| 2 | Fix n8n Variation Gen Parse Webhook Data (new_item_id) | n8n | 2026-02-26 | Reverted accidentally; re-deployed via fix-parse-webhook.mjs |

@@ -17,6 +17,13 @@ Errors encountered during development, with root causes and resolutions. Newest 
 
 ---
 
+### 2026-02-26: n8n deploy script idempotency gap — Parse Webhook Data fix not pushed
+**Context**: Re-deploying new_item_id changes to Variation Generation workflow after accidental revert
+**Error**: `deploy-new-item-id-variation-gen.mjs` reported "Parse Webhook Data: added new_item_id" then "Already migrated to shopee_listing_products. Nothing to do." and exited without pushing
+**Root Cause**: Script checks Prepare MySQL Data for `shopee_listing_products` as idempotency guard and calls `process.exit(0)` — this exits BEFORE Step 4 (push), so any fixes applied to other nodes (like Parse Webhook Data) in Steps 2-3 are lost
+**Resolution**: Created `fix-parse-webhook.mjs` — targeted script that only fixes Parse Webhook Data and pushes immediately
+**Prevention**: Deploy scripts should either (a) push after ALL node updates regardless of which were skipped, or (b) check idempotency per-node independently before exiting
+
 ### 2026-02-24: VM TT Selenium `SessionNotCreatedException` — Chrome not reachable on port 9222
 **Context**: Testing updated Shopee.py with `debuggerAddress` on VM TT
 **Error**: `session not created: cannot connect to chrome at 127.0.0.1:9222 from chrome not reachable`

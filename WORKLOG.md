@@ -4,6 +4,46 @@ Session-by-session record of work done. Newest entries at the top.
 
 ---
 
+## W11: Feb 26, 2026
+
+### Session 0226-1: Data Cleanup — Fix Display Issues for Shared product_ids
+
+**Context**: After new_item_id migration (Phases 1-4), existing data was corrupt from old backfill. 224 of 555 events had no product row, 37 had wrong item_type, 61 collision products had mixed/wrong 1688 data.
+
+**What was done**:
+
+**Step 1 — Fix item_type mismatches (SQL)**:
+- Ran UPDATE on both `requestDatabase` and `webapp_test` to fix 37 product rows where `item_type = 'new_product'` but linked `new_items.launch_type = 'New Variation'`
+- Verified: 0 mismatches remaining on both databases
+
+**Step 2 — Delete corrupt collision data (SQL)**:
+- Identified 63 product_ids with multiple events (both New Product + New Variation)
+- Deleted all product rows + variation rows for collision product_ids on both databases
+- Verified: 0 collision product rows, 0 collision variation rows remaining
+- Post-cleanup state: 270 correct products (requestDatabase), 264 (webapp_test), 285+ missing events awaiting scraper re-run
+
+**Step 3 — Scrapers already running**:
+- Confirmed scrapers (updated in Phase 2) are already populating data correctly
+- Verified product_id 9193675690: new_item_id 429 (Toilet Cleaner, 2 vars) and 485 (Expanding Foam, 1 var) already created with correct isolated data
+- new_item_id 397 (Glue Gun / New Product) not yet scraped — awaiting New Product scraper
+
+**n8n Workflow Fix — Parse Webhook Data**:
+- User accidentally reverted changes to Shopee Listing New Variation Generation workflow (`_nYkX49YkTfTdwWTsDjM1`)
+- Diagnosed: "Prepare MySQL Data" node was intact (already had new_item_id code), but "Parse Webhook Data" was missing `new_item_id` extraction
+- Deploy script's idempotency check on Prepare MySQL Data caused early exit before pushing Parse Webhook Data fix
+- Created `fix-parse-webhook.mjs` to push just the Parse Webhook Data fix
+- Deployed successfully — version `ba68a222`, verified `new_item_id` present
+
+**Files created**: `n8n-updates/fix-parse-webhook.mjs`
+
+**Tools used**: MySQL MCP, n8n REST API, Node.js
+
+**Key decisions**:
+- Delete collision data rather than attempt repair — scrapers will recreate correctly with per-new_item_id isolation
+- Fix deploy script idempotency gap by creating targeted single-node fix script
+
+---
+
 ## W10: Feb 24, 2026
 
 ### Session 0224-2: Variation Name Prompt v2 + Image Generation Prompt Review
