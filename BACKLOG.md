@@ -55,3 +55,7 @@ Prioritized parking lot for ideas, deferred tasks, and improvements. Organized b
 |---|------|--------|-----------|-------|
 | 1 | Data cleanup: fix item_type mismatches + delete collision data | Database | 2026-02-26 | Steps 1-2 of data cleanup plan. Ran on both requestDatabase and webapp_test |
 | 2 | Fix n8n Variation Gen Parse Webhook Data (new_item_id) | n8n | 2026-02-26 | Reverted accidentally; re-deployed via fix-parse-webhook.mjs |
+| 3 | Fix Cloudflare 524 false failure on regeneration | Webapp | 2026-02-27 | Gateway timeout sentinel pattern — keeps job as "processing", auto-completion picks up n8n output |
+| 4 | Fix n8n Has Binary? node in New Product Regen | n8n | 2026-02-27 | Replaced $binary with $json.image_type check — GCS uploads now work |
+| 5 | Add staging GCS prefix to New Variation Regen | n8n | 2026-02-27 | Both regen workflows now upload to /staging/ in regen mode |
+| 6 | Fix region display for null shop items | Webapp | 2026-02-27 | Default null/undefined shop to "MY" to match New Items tab behavior |

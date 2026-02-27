@@ -4,6 +4,60 @@ Session-by-session record of work done. Newest entries at the top.
 
 ---
 
+## W12: Feb 27, 2026
+
+### Session 0227-1: Cloudflare 524 Timeout Fix + n8n Has Binary? Fix + GCS Staging Consistency
+
+**Context**: Regenerating all images for a new_product (product_id 46853536298) via n8n takes 14-30+ minutes, but Cloudflare proxy has ~100s timeout — returns HTTP 524 before n8n finishes. Webapp marks job as FAILED even though n8n is still running. Also investigated broken GCS image upload (Has Binary? node) and staging path inconsistency.
+
+**What was done**:
+
+**Fix 1 — Cloudflare 524 gateway timeout (4 files)**:
+- **Root cause**: `n8n.barndoguru.com` is behind Cloudflare (DNS: 2606:4700:*). Cloudflare's ~100s proxy timeout fires before the code-level 480s AbortController timeout. Webapp catches the 524, marks job as FAILED, but n8n is still processing.
+- **Solution**: Keep job as "processing" instead of marking FAILED for gateway timeouts. n8n writes results to DB when done; auto-completion picks it up on next page load.
+- `n8n-webhook.ts`: Return `{ __gatewayTimeout: true }` sentinel for 502/504/524 and AbortError instead of throwing
+- `generate.ts`: Handle gateway timeout sentinel (keep job as PROCESSING), added `isRecoverableFailure` helper (matches "timed out" + 524/502/504 errors), broadened detail auto-completion recovery
+- `page.tsx`: Amber warning for gateway errors (instead of red error)
+- `utils.ts`: Soft message "AI generation is taking longer than expected" for 502/504/524
+
+**Fix 2 — n8n Has Binary? node (execution 660/661)**:
+- **Root cause**: Has Binary? IF node used `$binary` expression which doesn't resolve inside Loop Over Items v3 + IF node v2 with `typeValidation: "strict"`. Binary data IS present on items but `$binary` doesn't reference it correctly.
+- User tried adding `=` prefix (execution 661) — still failed
+- **Solution**: Replaced both `$binary`-based conditions with single `$json.image_type !== "none"` check, set `typeValidation: "loose"`. Deployed via n8n REST API.
+- Workflow `M6wBk9TCuMohMByU` updated successfully
+
+**Fix 3 — GCS staging path for New Variation Regeneration**:
+- **Root cause**: New Product Regeneration (`M6wBk9TCuMohMByU`) used `/staging/` GCS prefix in regen mode, but New Variation Regeneration (`rKOMjD071lkvvZDe`) uploaded directly to live path — no staging.
+- **Solution**: Updated `Prepare GCS Uploads` node in New Variation Regen to add `isRegen` flag from `webhookData.is_regen_mode` and `stagingPrefix = isRegen ? '/staging' : ''`
+- Created and ran `update-variation-regen.mjs` — deployed successfully
+
+**Fix 4 — Region display for null shop items**:
+- Items with null `shop` column showed "-" instead of "MY" on Shopee Listings page
+- Changed `deriveRegionFromShop` to default null/undefined shop to "MY" (matches New Items tab behavior where `item.region !== "SG"` includes everything not SG)
+
+**Files modified (webapp — `it-awesomeree/awesomeree-web-app` test branch)**:
+- `lib/services/shopee-listings/n8n-webhook.ts`
+- `lib/services/shopee-listings/generate.ts`
+- `lib/services/shopee-listings/normalizers.ts` (date timezone fix)
+- `components/shopee-listing/hooks/useGenerateFlow.ts`
+- `components/shopee-listing/page.tsx`
+- `components/shopee-listing/utils.ts`
+
+**n8n workflows modified via REST API**:
+- `M6wBk9TCuMohMByU` (New Product Regen) — Fixed Has Binary? node
+- `rKOMjD071lkvvZDe` (New Variation Regen) — Added staging GCS prefix
+
+**Helper scripts created**: `fetch-exec.mjs`, `fetch-exec-detail.mjs`, `update-variation-regen.mjs`
+
+**Tools used**: n8n REST API, Node.js, MySQL MCP, dig (DNS lookup), nslookup
+
+**Key decisions**:
+- Gateway timeout = "still processing" (not failed) — n8n always finishes, just CF can't relay the response
+- Use `$json.image_type` instead of `$binary` in n8n IF nodes — `$json` is reliable across all node contexts
+- Both regen workflows now use `/staging/` prefix — consistent behavior
+
+---
+
 ## W11: Feb 26, 2026
 
 ### Session 0226-1: Data Cleanup — Fix Display Issues for Shared product_ids

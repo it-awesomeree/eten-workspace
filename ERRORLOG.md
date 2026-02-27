@@ -17,6 +17,20 @@ Errors encountered during development, with root causes and resolutions. Newest 
 
 ---
 
+### 2026-02-27: Cloudflare 524 kills regeneration that n8n is still processing
+**Context**: Regenerating all images for product_id 46853536298 via n8n takes 14+ minutes, but Cloudflare proxy returns 524 at ~100s
+**Error**: Frontend shows "Last AI request failed. AI service is temporarily unavailable (524)" — but n8n actually completed successfully
+**Root Cause**: `n8n.barndoguru.com` is behind Cloudflare (DNS resolves to 2606:4700:* IPs). Cloudflare free/pro/business plans have ~100s proxy read timeout. Code-level 480s AbortController never fires because CF returns 524 first. Webapp catches the error and marks `n8n_job_status = 'failed'`, but n8n received the request and continues processing.
+**Resolution**: (1) Return sentinel `{ __gatewayTimeout: true }` for 502/504/524 instead of throwing, (2) Keep job as "processing" — auto-completion detects n8n output on next page load, (3) Broadened `isRecoverableFailure` helper for safety net, (4) Frontend shows amber warning instead of red error
+**Prevention**: For long-running n8n jobs behind Cloudflare, never rely on synchronous response. Fire-and-forget + poll for results.
+
+### 2026-02-27: n8n $binary expression unreliable in Loop Over Items + IF node
+**Context**: Has Binary? IF node checking `{{ Object.keys($binary).length > 0 }}` returned FALSE even though binary data was present on items
+**Error**: Execution 660 and 661 — all items sent to FALSE branch, GCS upload skipped, resulting in 404 image URLs
+**Root Cause**: `$binary` expression doesn't resolve to the item's binary data inside Loop Over Items v3 + IF node v2 with `typeValidation: "strict"`. The `$json` object IS accessible and contains `image_type` field set by the upstream Code node.
+**Resolution**: Replaced both `$binary`-based conditions with `{{ $json.image_type !== "none" }}`, set `typeValidation: "loose"`. Deployed via n8n REST API PUT.
+**Prevention**: In n8n, prefer `$json`-based checks over `$binary` in IF nodes, especially inside Loop Over Items. `$json` is reliably set by upstream Code nodes.
+
 ### 2026-02-26: n8n deploy script idempotency gap — Parse Webhook Data fix not pushed
 **Context**: Re-deploying new_item_id changes to Variation Generation workflow after accidental revert
 **Error**: `deploy-new-item-id-variation-gen.mjs` reported "Parse Webhook Data: added new_item_id" then "Already migrated to shopee_listing_products. Nothing to do." and exited without pushing

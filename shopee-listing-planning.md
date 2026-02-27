@@ -1,7 +1,7 @@
 # Shopee Listing Pipeline - Schema Redesign Plan
 
-> **Last updated**: 2026-02-26
-> **Status**: Phase 5 in progress (scrapers running)
+> **Last updated**: 2026-02-27
+> **Status**: Phase 5 in progress (scrapers running). Additional fixes deployed (524 timeout, Has Binary?, staging consistency).
 > **Author**: Eten (IT Team Lead) + Claude (Senior Dev)
 
 ---
@@ -534,6 +534,26 @@ GET /api/shopee-listings?newItemId=485
 **Step 4: Verification** ⏳ PENDING
 - Run verification queries after scraper completion
 - Expected: 0 missing events, 0 item_type mismatches, 555 total products
+
+### Phase 5b: Additional Fixes (2026-02-27)
+
+**Cloudflare 524 Gateway Timeout Fix** ✅ COMPLETE
+- Webapp no longer marks job as FAILED when Cloudflare returns 524 (n8n still running behind proxy)
+- Gateway timeout returns sentinel → job stays "processing" → auto-completion detects output on next page load
+- Files: `n8n-webhook.ts`, `generate.ts`, `page.tsx`, `utils.ts` (on `test` branch)
+
+**n8n Has Binary? Node Fix** ✅ COMPLETE
+- `$binary` expression unreliable in Loop Over Items v3 + IF node v2 context
+- Replaced with `$json.image_type !== "none"` — reliable across all node contexts
+- Workflow: New Product Regen (`M6wBk9TCuMohMByU`)
+
+**GCS Staging Consistency** ✅ COMPLETE
+- New Variation Regen (`rKOMjD071lkvvZDe`) now uses `/staging/` prefix in regen mode (matching New Product Regen)
+- Both regen workflows: `{productId}/staging/variations/...` for regen, `{productId}/variations/...` for normal
+
+**Region Display Fix** ✅ COMPLETE
+- Items with null `shop` column now default to "MY" region (matches New Items tab behavior)
+- File: `generate.ts` — `deriveRegionFromShop` returns "MY" for null/undefined
 
 ### Phase 6: End-to-End Testing ⏳ PENDING
 1. Verify product_id 9193675690: 3 separate rows, correct data isolation
